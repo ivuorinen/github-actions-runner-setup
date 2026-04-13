@@ -74,7 +74,7 @@ api() {
   rm -f "${response_file}"
 
   if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
-    message="$(printf '%s' "${response}" | jq -r '.message // empty' 2>/dev/null || true)"
+    message="$(printf '%s' "${response}" | jq -r '.message // ""' 2>/dev/null || true)"
     fail "API ${method} ${url} returned HTTP ${http_code}${message:+: ${message}}"
   fi
 
