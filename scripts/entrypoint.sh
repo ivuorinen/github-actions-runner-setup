@@ -144,18 +144,21 @@ runner_url() {
   fi
 }
 
+deregister_runner() {
+  local jwt installation_token remove_token
+  jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
+  installation_token="$(get_installation_token "${jwt}")"
+  remove_token="$(get_remove_token "${installation_token}")"
+  ./config.sh remove --unattended --token "${remove_token}"
+}
+
 cleanup() {
   local exit_code="$?"
   set +e
 
   if [[ -f ".runner" ]]; then
     log 'Removing runner registration'
-    (
-      jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
-      installation_token="$(get_installation_token "${jwt}")"
-      remove_token="$(get_remove_token "${installation_token}")"
-      ./config.sh remove --unattended --token "${remove_token}"
-    ) || log 'Warning: failed to deregister runner'
+    deregister_runner || log 'Warning: failed to deregister runner'
   fi
 
   rm -f /runner-tmp/github-app.pem
@@ -170,7 +173,10 @@ main() {
   # Require exactly one of: a pre-mounted key file (preferred, not stored in
   # container env/config) or a base64-encoded key in the environment.
   if [[ -z "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -z "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
-    fail "Either GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64 must be set"
+    fail "Exactly one of GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64 must be set"
+  fi
+  if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -n "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
+    fail "GITHUB_APP_PRIVATE_KEY_FILE and GITHUB_APP_PRIVATE_KEY_B64 cannot both be set; choose one"
   fi
   require_env RUNNER_SCOPE
   require_env RUNNER_WORKDIR
@@ -211,8 +217,25 @@ main() {
     [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] \
       || fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
     install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
+    # Unset the unused variable so it doesn't linger in child-process environments.
+    unset GITHUB_APP_PRIVATE_KEY_B64 || true
   else
-    printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
+    local pem_tmp
+    pem_tmp="/runner-tmp/github-app.pem.tmp"
+    rm -f "${pem_tmp}"
+    if ! printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >"${pem_tmp}" 2>/dev/null; then
+      rm -f "${pem_tmp}"
+      fail "Failed to decode GITHUB_APP_PRIVATE_KEY_B64; verify it contains valid base64-encoded private key data"
+    fi
+    if [[ ! -s "${pem_tmp}" ]]; then
+      rm -f "${pem_tmp}"
+      fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 produced an empty file; verify it contains valid base64-encoded private key data"
+    fi
+    grep -q -- '-----BEGIN .*PRIVATE KEY-----' "${pem_tmp}" \
+      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 has no PEM private key header; verify it contains the base64-encoded GitHub App private key"; }
+    grep -q -- '-----END .*PRIVATE KEY-----' "${pem_tmp}" \
+      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 has no PEM private key footer; verify it contains the base64-encoded GitHub App private key"; }
+    mv "${pem_tmp}" /runner-tmp/github-app.pem
     unset GITHUB_APP_PRIVATE_KEY_B64
   fi
 
