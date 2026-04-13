@@ -173,8 +173,26 @@ main() {
     fail "Either GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64 must be set"
   fi
   require_env RUNNER_SCOPE
-  require_env RUNNER_LABELS
   require_env RUNNER_WORKDIR
+
+  # Default to the public GitHub endpoints when explicit values are not
+  # provided (for example, when running outside docker-compose). GitHub
+  # Enterprise Server users must override both variables for their instance.
+  : "${GITHUB_API_URL:=https://api.github.com}"
+  : "${GITHUB_WEB_URL:=https://github.com}"
+
+  # Build the runner label set from default and per-runner extra labels,
+  # assembling here rather than in docker-compose.yml so that an empty
+  # RUNNER_EXTRA_LABELS never produces a trailing comma.
+  # Falls back to a pre-built RUNNER_LABELS for direct `docker run -e` usage.
+  if [[ -z "${RUNNER_LABELS:-}" ]]; then
+    if [[ -n "${RUNNER_EXTRA_LABELS:-}" ]]; then
+      RUNNER_LABELS="${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_EXTRA_LABELS}"
+    else
+      RUNNER_LABELS="${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}"
+    fi
+  fi
+  [[ -n "${RUNNER_LABELS}" ]] || fail "RUNNER_LABELS is empty — set RUNNER_DEFAULT_LABELS or RUNNER_EXTRA_LABELS"
 
   if [[ "${RUNNER_SCOPE}" == "org" ]]; then
     require_env GITHUB_ORG

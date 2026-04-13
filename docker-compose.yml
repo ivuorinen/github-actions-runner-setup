@@ -46,7 +46,8 @@ services:
       UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
       START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
       RUNNER_INSTANCE_NAME: ${RUNNER_1_NAME:-}
-      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_1_LABELS:-lint,small}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_1_LABELS:-lint,small}
 
   runner-2:
     <<: *runner-common
@@ -69,7 +70,8 @@ services:
       UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
       START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
       RUNNER_INSTANCE_NAME: ${RUNNER_2_NAME:-}
-      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_2_LABELS:-lint,medium}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_2_LABELS:-lint,medium}
 
   runner-3:
     <<: *runner-common
@@ -92,10 +94,12 @@ services:
       UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
       START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
       RUNNER_INSTANCE_NAME: ${RUNNER_3_NAME:-}
-      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_3_LABELS:-general}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_3_LABELS:-general}
 
 # To add another runner, copy one of the runner-* services and change:
 # - service name
 # - hostname
 # - RUNNER_INSTANCE_NAME variable
-# - RUNNER_LABELS variable
+# - RUNNER_EXTRA_LABELS variable (per-runner labels; combined with RUNNER_DEFAULT_LABELS
+#   by entrypoint.sh to form the final label set passed to config.sh)
