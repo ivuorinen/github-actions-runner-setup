@@ -177,20 +177,24 @@ main() {
 
   log "Configuring runner ${runner_name} for ${target_url}"
 
-  ./config.sh \
-    --unattended \
-    --replace \
-    --ephemeral \
-    --disableupdate \
-    --url "${target_url}" \
-    --token "${registration_token}" \
-    --name "${runner_name}" \
-    --labels "${RUNNER_LABELS}" \
+  local -a config_args=(
+    --unattended
+    --replace
+    --ephemeral
+    --disableupdate
+    --url "${target_url}"
+    --token "${registration_token}"
+    --name "${runner_name}"
+    --labels "${RUNNER_LABELS}"
     --work "${RUNNER_WORKDIR}"
+  )
 
   if [[ -n "${RUNNER_GROUP:-}" && "${RUNNER_SCOPE}" == "org" ]]; then
-    log "Runner group requested: ${RUNNER_GROUP}"
+    log "Runner group: ${RUNNER_GROUP}"
+    config_args+=(--runnergroup "${RUNNER_GROUP}")
   fi
+
+  ./config.sh "${config_args[@]}"
 
   log 'Starting runner listener'
   ./run.sh
