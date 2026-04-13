@@ -61,10 +61,24 @@ api() {
   fi
 }
 
+extract_token() {
+  local response="$1"
+  local token
+  token="$(printf '%s' "${response}" | jq -r '.token')"
+  if [[ -z "${token}" || "${token}" == "null" ]]; then
+    local message
+    message="$(printf '%s' "${response}" | jq -r '.message // empty')"
+    fail "API returned no token${message:+: ${message}}"
+  fi
+  printf '%s' "${token}"
+}
+
 get_installation_token() {
   local jwt="$1"
   local url="${GITHUB_API_URL}/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens"
-  api POST "${url}" "${jwt}" '{}' | jq -r '.token'
+  local response
+  response="$(api POST "${url}" "${jwt}" '{}')"
+  extract_token "${response}"
 }
 
 get_registration_token() {
@@ -82,7 +96,9 @@ get_registration_token() {
     fail "RUNNER_SCOPE must be either org or repo"
   fi
 
-  api POST "${url}" "${installation_token}" '{}' | jq -r '.token'
+  local response
+  response="$(api POST "${url}" "${installation_token}" '{}')"
+  extract_token "${response}"
 }
 
 get_remove_token() {
@@ -95,7 +111,9 @@ get_remove_token() {
     url="${GITHUB_API_URL}/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/actions/runners/remove-token"
   fi
 
-  api POST "${url}" "${installation_token}" '{}' | jq -r '.token'
+  local response
+  response="$(api POST "${url}" "${installation_token}" '{}')"
+  extract_token "${response}"
 }
 
 runner_url() {
@@ -110,15 +128,14 @@ cleanup() {
   local exit_code="$?"
   set +e
 
-  if [[ -f "/runner-tmp/.runner" ]]; then
+  if [[ -f ".runner" ]]; then
     log 'Removing runner registration'
-
-    local jwt installation_token remove_token
-    jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
-    installation_token="$(get_installation_token "${jwt}")"
-    remove_token="$(get_remove_token "${installation_token}")"
-
-    ./config.sh remove --unattended --token "${remove_token}"
+    (
+      jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
+      installation_token="$(get_installation_token "${jwt}")"
+      remove_token="$(get_remove_token "${installation_token}")"
+      ./config.sh remove --unattended --token "${remove_token}"
+    ) || log 'Warning: failed to deregister runner'
   fi
 
   rm -f /runner-tmp/github-app.pem
