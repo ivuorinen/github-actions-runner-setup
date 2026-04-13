@@ -11,7 +11,7 @@ command="${TOOL_INPUT_command:-}"
 # Match --force but not --force-with-lease (the safe alternative)
 # Match -f at end of string or followed by non-identifier char
 if [[ "${command}" =~ git\ push.*--force($|[^-]) ]] || [[ "${command}" =~ git\ push.*\ -f($|[^a-z]) ]]; then
-  if [[ "${command}" =~ (main|master) ]]; then
+  if [[ "${command}" =~ (^|[[:space:]:/])(refs/heads/)?(main|master)($|[[:space:]]) ]]; then
     echo "BLOCKED: Force push to main/master is not allowed" >&2
     exit 2
   fi

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-if pgrep -f "Runner.Listener|run.sh|config.sh" >/dev/null 2>&1; then
-  exit 0
-fi
+for cmdline in /proc/[0-9]*/cmdline; do
+  [[ -r "${cmdline}" ]] || continue
+  cmd="$(tr '\0' ' ' <"${cmdline}" 2>/dev/null || true)"
+  case "${cmd}" in
+    *Runner.Listener* | *run.sh* | *config.sh*)
+      exit 0
+      ;;
+  esac
+done
 
 exit 1

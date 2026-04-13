@@ -24,13 +24,14 @@ base64url() {
 make_jwt() {
   local app_id="$1"
   local pem_file="$2"
-  local now exp header payload unsigned signature
+  local now iat exp header payload unsigned signature
 
   now="$(date +%s)"
-  exp="$((now + 540))"
+  iat="$((now - 60))"
+  exp="$((iat + 540))"
 
   header='{"alg":"RS256","typ":"JWT"}'
-  payload="{\"iat\":${now},\"exp\":${exp},\"iss\":${app_id}}"
+  payload="{\"iat\":${iat},\"exp\":${exp},\"iss\":${app_id}}"
 
   unsigned="$(printf '%s' "${header}" | base64url).$(printf '%s' "${payload}" | base64url)"
   signature="$(printf '%s' "${unsigned}" | openssl dgst -binary -sha256 -sign "${pem_file}" | base64url)"
@@ -45,7 +46,9 @@ api() {
   local data="${4:-}"
 
   if [[ -n "${data}" ]]; then
-    curl -fsSL -X "${method}" \
+    curl -fsSL --connect-timeout 10 --max-time 30 \
+      --retry 3 --retry-all-errors \
+      -X "${method}" \
       -H 'Accept: application/vnd.github+json' \
       -H "Authorization: Bearer ${token}" \
       -H 'X-GitHub-Api-Version: 2022-11-28' \
@@ -53,7 +56,9 @@ api() {
       "${url}" \
       -d "${data}"
   else
-    curl -fsSL -X "${method}" \
+    curl -fsSL --connect-timeout 10 --max-time 30 \
+      --retry 3 --retry-all-errors \
+      -X "${method}" \
       -H 'Accept: application/vnd.github+json' \
       -H "Authorization: Bearer ${token}" \
       -H 'X-GitHub-Api-Version: 2022-11-28' \

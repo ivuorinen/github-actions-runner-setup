@@ -20,6 +20,7 @@ COPY scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh \
     && mkdir -p /runner-tmp \
+    && usermod -aG docker runner \
     && chown -R runner:docker /home/runner /runner-tmp
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
