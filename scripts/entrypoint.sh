@@ -143,7 +143,7 @@ main() {
   fi
 
   umask 077
-  printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d > /runner-tmp/github-app.pem
+  printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"

@@ -29,7 +29,8 @@ All runners mount:
 
 - `/var/run/docker.sock:/var/run/docker.sock`
 
-This means Docker pulls and image layers are shared through the host daemon. If your workflows repeatedly use the same container images for linters, scanners, or build tools, later jobs avoid re-pulling unchanged layers.
+This means Docker pulls and image layers are shared through the host daemon.
+If your workflows repeatedly use the same container images for linters, scanners, or build tools, later jobs avoid re-pulling unchanged layers.
 
 ## Quick start
 
