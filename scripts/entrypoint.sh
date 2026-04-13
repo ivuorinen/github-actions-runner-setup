@@ -167,7 +167,11 @@ main() {
 
   require_env GITHUB_APP_ID
   require_env GITHUB_APP_INSTALLATION_ID
-  require_env GITHUB_APP_PRIVATE_KEY_B64
+  # Require exactly one of: a pre-mounted key file (preferred, not stored in
+  # container env/config) or a base64-encoded key in the environment.
+  if [[ -z "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -z "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
+    fail "Either GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64 must be set"
+  fi
   require_env RUNNER_SCOPE
   require_env RUNNER_LABELS
   require_env RUNNER_WORKDIR
@@ -180,8 +184,20 @@ main() {
   fi
 
   umask 077
-  printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
-  unset GITHUB_APP_PRIVATE_KEY_B64
+  # Populate /runner-tmp/github-app.pem from whichever source is configured.
+  # GITHUB_APP_PRIVATE_KEY_FILE (a mounted file) is preferred because it avoids
+  # storing the secret in the container's environment/config (visible via
+  # `docker inspect`). GITHUB_APP_PRIVATE_KEY_B64 is supported as a fallback for
+  # environments that inject secrets only through environment variables (e.g. Coolify).
+  if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
+    [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] \
+      || fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+    cp "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
+    chmod 600 /runner-tmp/github-app.pem
+  else
+    printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
+    unset GITHUB_APP_PRIVATE_KEY_B64
+  fi
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"

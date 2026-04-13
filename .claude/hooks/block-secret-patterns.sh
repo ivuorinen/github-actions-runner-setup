@@ -7,11 +7,11 @@ set -euo pipefail
 file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
 [[ -z "${file_path}" ]] && exit 0
 
-# Only skip specific known example/documentation files that may intentionally
-# reference token formats; scan all other files, including Markdown, for secrets.
+# Only skip the dedicated example env file that may intentionally reference
+# placeholder token formats; scan all other files, including Markdown, for secrets.
 basename="$(basename "${file_path}")"
 case "${basename}" in
-.env.example | SETUP.md | README.md | CLAUDE.md) exit 0 ;;
+.env.example) exit 0 ;;
 esac
 
 # Get the content being written (new_string for Edit, content for Write)

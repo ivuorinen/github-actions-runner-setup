@@ -16,7 +16,7 @@ content=""
 [[ -n "${TOOL_INPUT_content:-}" ]] && content+="${TOOL_INPUT_content}"$'\n'
 [[ -z "${content}" ]] && exit 0
 
-if echo "${content}" | grep -qE '(extract_token|get_.*_token|make_jwt|cleanup|PRIVATE_KEY|pem)'; then
+if printf '%s' "${content}" | grep -qE '(extract_token|get_.*_token|make_jwt|cleanup|PRIVATE_KEY|pem)'; then
   echo "NOTE: This edit touches security-critical token handling code." >&2
   echo "  - Verify extract_token() still validates null/empty responses" >&2
   echo "  - Verify cleanup() subshell isolates fail() from PEM deletion" >&2

@@ -11,13 +11,13 @@ file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
 # Determine which pre-commit hooks to run based on file type
 case "${file_path}" in
 *.sh)
-  pre-commit run shfmt --files "${file_path}" 2>/dev/null || true
-  pre-commit run shellcheck --files "${file_path}" 2>/dev/null || true
+  pre-commit run shfmt --files "${file_path}" || true
+  pre-commit run shellcheck --files "${file_path}" || true
   ;;
 *.yml | *.yaml)
-  pre-commit run yamllint --files "${file_path}" 2>/dev/null || true
+  pre-commit run yamllint --files "${file_path}" || true
   ;;
 *.md)
-  pre-commit run markdownlint --files "${file_path}" 2>/dev/null || true
+  pre-commit run markdownlint --files "${file_path}" || true
   ;;
 esac

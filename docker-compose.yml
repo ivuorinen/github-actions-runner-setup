@@ -14,7 +14,7 @@ x-runner-common: &runner-common
     - /var/run/docker.sock:/var/run/docker.sock
   tmpfs:
     - /tmp:size=1g,exec
-    - /runner-tmp:size=128m,exec
+    - /runner-tmp:size=128m,noexec
   security_opt:
     - no-new-privileges:true
 
@@ -25,7 +25,14 @@ services:
     environment:
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      # Provide the private key via GITHUB_APP_PRIVATE_KEY_B64 (base64 env var,
+      # visible in `docker inspect`) OR via GITHUB_APP_PRIVATE_KEY_FILE (path to a
+      # mounted file — preferred; avoids storing the key in the container config).
+      # To use a mounted file: add a volume/secret mount and set
+      # GITHUB_APP_PRIVATE_KEY_FILE to the path inside the container, e.g.
+      # /run/secrets/github_app_key. Leave the other variable empty.
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -47,7 +54,8 @@ services:
     environment:
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -69,7 +77,8 @@ services:
     environment:
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
