@@ -8,8 +8,12 @@ file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
 
 [[ "$(basename "${file_path}")" != "entrypoint.sh" ]] && exit 0
 
-# Check if the edit touches token-handling or cleanup code
-content="${TOOL_INPUT_new_string:-${TOOL_INPUT_old_string:-}}"
+# Check if the edit touches token-handling or cleanup code.
+# Aggregate content from Edit (new_string/old_string) and Write (content) tools.
+content=""
+[[ -n "${TOOL_INPUT_new_string:-}" ]] && content+="${TOOL_INPUT_new_string}"$'\n'
+[[ -n "${TOOL_INPUT_old_string:-}" ]] && content+="${TOOL_INPUT_old_string}"$'\n'
+[[ -n "${TOOL_INPUT_content:-}" ]] && content+="${TOOL_INPUT_content}"$'\n'
 [[ -z "${content}" ]] && exit 0
 
 if echo "${content}" | grep -qE '(extract_token|get_.*_token|make_jwt|cleanup|PRIVATE_KEY|pem)'; then

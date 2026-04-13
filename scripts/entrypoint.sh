@@ -44,26 +44,41 @@ api() {
   local url="$2"
   local token="$3"
   local data="${4:-}"
+  local response_file http_code response message
+
+  response_file="$(mktemp)"
+
+  # Build curl args; -o captures body to file, -w prints HTTP code to stdout.
+  # Omitting -f so we can surface GitHub's error .message on 4xx/5xx.
+  local -a curl_args=(
+    -sSL --connect-timeout 10 --max-time 30
+    --retry 3 --retry-all-errors
+    -X "${method}"
+    -H 'Accept: application/vnd.github+json'
+    -H "Authorization: Bearer ${token}"
+    -H 'X-GitHub-Api-Version: 2022-11-28'
+    -o "${response_file}"
+    -w '%{http_code}'
+  )
 
   if [[ -n "${data}" ]]; then
-    curl -fsSL --connect-timeout 10 --max-time 30 \
-      --retry 3 --retry-all-errors \
-      -X "${method}" \
-      -H 'Accept: application/vnd.github+json' \
-      -H "Authorization: Bearer ${token}" \
-      -H 'X-GitHub-Api-Version: 2022-11-28' \
-      -H 'Content-Type: application/json' \
-      "${url}" \
-      -d "${data}"
-  else
-    curl -fsSL --connect-timeout 10 --max-time 30 \
-      --retry 3 --retry-all-errors \
-      -X "${method}" \
-      -H 'Accept: application/vnd.github+json' \
-      -H "Authorization: Bearer ${token}" \
-      -H 'X-GitHub-Api-Version: 2022-11-28' \
-      "${url}"
+    curl_args+=(-H 'Content-Type: application/json' -d "${data}")
   fi
+
+  http_code="$(curl "${curl_args[@]}" "${url}")" || {
+    rm -f "${response_file}"
+    fail "Network error calling ${method} ${url}"
+  }
+
+  response="$(cat "${response_file}")"
+  rm -f "${response_file}"
+
+  if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
+    message="$(printf '%s' "${response}" | jq -r '.message // empty' 2>/dev/null || true)"
+    fail "API ${method} ${url} returned HTTP ${http_code}${message:+: ${message}}"
+  fi
+
+  printf '%s' "${response}"
 }
 
 extract_token() {
