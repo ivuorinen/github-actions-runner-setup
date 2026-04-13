@@ -192,8 +192,7 @@ main() {
   if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
     [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] \
       || fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
-    cp "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
-    chmod 600 /runner-tmp/github-app.pem
+    install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
   else
     printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
     unset GITHUB_APP_PRIVATE_KEY_B64
