@@ -1,0 +1,106 @@
+name: github-actions-runners
+
+x-runner-common: &runner-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: ${RUNNER_IMAGE_NAME:-local/github-app-actions-runner:latest}
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    GITHUB_APP_ID: ${GITHUB_APP_ID}
+    GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+    GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+    GITHUB_HOST: ${GITHUB_HOST:-github.com}
+    GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+    GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+    RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+    GITHUB_ORG: ${GITHUB_ORG:-}
+    GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+    GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+    RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+    RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/_work}
+    DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-1}
+    UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+    START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+  tmpfs:
+    - /tmp:size=1g,exec
+    - /runner-tmp:size=128m,exec
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  runner-1:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-1
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/_work}
+      DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-1}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
+      RUNNER_INSTANCE_NAME: ${RUNNER_1_NAME:-}
+      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_1_LABELS:-lint,small}
+
+  runner-2:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-2
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/_work}
+      DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-1}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
+      RUNNER_INSTANCE_NAME: ${RUNNER_2_NAME:-}
+      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_2_LABELS:-lint,medium}
+
+  runner-3:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-3
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/_work}
+      DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-1}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
+      RUNNER_INSTANCE_NAME: ${RUNNER_3_NAME:-}
+      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_3_LABELS:-general}
+
+# To add another runner, copy one of the runner-* services and change:
+# - service name
+# - hostname
+# - RUNNER_INSTANCE_NAME variable
+# - RUNNER_LABELS variable
