@@ -2,7 +2,7 @@
 # PreToolUse hook: Block edits to .env files to prevent accidental secret exposure
 # Exit code 2 = block the tool call
 
-set -euo pipefail
+set -Eeuo pipefail
 
 file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
 [[ -z "${file_path}" ]] && exit 0

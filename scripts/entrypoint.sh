@@ -158,7 +158,9 @@ cleanup() {
 
   if [[ -f ".runner" ]]; then
     log 'Removing runner registration'
-    deregister_runner || log 'Warning: failed to deregister runner'
+    # Run in a subshell so that exit/fail inside deregister_runner cannot
+    # abort the rest of cleanup (specifically: PEM deletion below).
+    (deregister_runner) || log 'Warning: failed to deregister runner'
   fi
 
   rm -f /runner-tmp/github-app.pem

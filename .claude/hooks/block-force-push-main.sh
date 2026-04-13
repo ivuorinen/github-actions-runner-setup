@@ -2,7 +2,7 @@
 # PreToolUse hook: Block force push to main/master branches
 # Exit code 2 = block the tool call
 
-set -euo pipefail
+set -Eeuo pipefail
 
 command="${TOOL_INPUT_command:-}"
 [[ -z "${command}" ]] && exit 0

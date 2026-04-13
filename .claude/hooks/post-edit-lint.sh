@@ -2,7 +2,7 @@
 # PostToolUse hook: Run pre-commit linting on edited files
 # Triggered after Edit/Write operations
 
-set -euo pipefail
+set -Eeuo pipefail
 
 file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
 [[ -z "${file_path}" ]] && exit 0

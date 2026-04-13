@@ -19,7 +19,7 @@ content="${TOOL_INPUT_new_string:-${TOOL_INPUT_content:-}}"
 [[ -z "${content}" ]] && exit 0
 
 # Check for common secret patterns
-if printf '%s\n' "${content}" | grep -qiE '(BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY)'; then
+if printf '%s\n' "${content}" | grep -qiE '(BEGIN ((RSA|EC|DSA|OPENSSH) )?PRIVATE KEY)'; then
   echo "BLOCKED: Content contains a private key" >&2
   exit 2
 fi

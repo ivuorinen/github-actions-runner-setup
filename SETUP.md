@@ -185,8 +185,10 @@ To add a new runner:
 2. rename it, for example `runner-4`
 3. set its hostname
 4. set `RUNNER_INSTANCE_NAME`
-5. set `RUNNER_LABELS`
-6. optionally add a matching `RUNNER_4_LABELS` variable into `.env`
+5. set `RUNNER_DEFAULT_LABELS` (shared base) and add a per-runner extra-label variable (e.g. `RUNNER_4_LABELS`) mapped to `RUNNER_EXTRA_LABELS`
+6. optionally add matching `RUNNER_4_LABELS` and `RUNNER_4_NAME` variables to `.env`
+
+If you prefer, you can also set `RUNNER_LABELS` directly in the service instead of using the `RUNNER_DEFAULT_LABELS` + `RUNNER_EXTRA_LABELS` pattern.
 
 Example additional service:
 
@@ -211,7 +213,8 @@ Example additional service:
       UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
       START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
       RUNNER_INSTANCE_NAME: ${RUNNER_4_NAME:-}
-      RUNNER_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral},${RUNNER_4_LABELS:-lint,large}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_4_LABELS:-lint,large}
 ```
 
 And in `.env`:
