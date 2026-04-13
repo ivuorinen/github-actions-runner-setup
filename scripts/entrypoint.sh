@@ -218,7 +218,7 @@ main() {
       || fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
     install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
     # Unset the unused variable so it doesn't linger in child-process environments.
-    unset GITHUB_APP_PRIVATE_KEY_B64 || true
+    unset GITHUB_APP_PRIVATE_KEY_B64
   else
     local pem_tmp
     pem_tmp="/runner-tmp/github-app.pem.tmp"
@@ -232,9 +232,9 @@ main() {
       fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 produced an empty file; verify it contains valid base64-encoded private key data"
     fi
     grep -q -- '-----BEGIN .*PRIVATE KEY-----' "${pem_tmp}" \
-      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 has no PEM private key header; verify it contains the base64-encoded GitHub App private key"; }
+      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM BEGIN header; verify it contains the base64-encoded GitHub App private key"; }
     grep -q -- '-----END .*PRIVATE KEY-----' "${pem_tmp}" \
-      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 has no PEM private key footer; verify it contains the base64-encoded GitHub App private key"; }
+      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM END footer; verify it contains the base64-encoded GitHub App private key"; }
     mv "${pem_tmp}" /runner-tmp/github-app.pem
     unset GITHUB_APP_PRIVATE_KEY_B64
   fi
