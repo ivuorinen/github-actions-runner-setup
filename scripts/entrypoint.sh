@@ -161,6 +161,7 @@ main() {
 
   umask 077
   printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >/runner-tmp/github-app.pem
+  unset GITHUB_APP_PRIVATE_KEY_B64
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
