@@ -1,0 +1,47 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-env-edit.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-secret-patterns.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/block-force-push-main.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-edit-lint.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/validate-compose-on-edit.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/warn-entrypoint-token-handling.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
