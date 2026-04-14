@@ -152,7 +152,7 @@ runner_url() {
 RUNNER_REMOVE_TOKEN=""
 
 deregister_runner() {
-  local remove_token="${RUNNER_REMOVE_TOKEN:-}"
+  local remove_token="${RUNNER_REMOVE_TOKEN}"
   if [[ -z "${remove_token}" ]]; then
     # Startup failed before we pre-computed the token.  Try to re-fetch via
     # PEM if it is still present (e.g. startup error before deletion).
