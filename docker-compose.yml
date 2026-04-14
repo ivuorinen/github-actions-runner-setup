@@ -14,7 +14,7 @@ x-runner-common: &runner-common
     - /var/run/docker.sock:/var/run/docker.sock
   tmpfs:
     - /tmp:size=1g,exec
-    - /runner-tmp:size=128m,noexec
+    - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
   security_opt:
     - no-new-privileges:true
 

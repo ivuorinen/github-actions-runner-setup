@@ -84,10 +84,13 @@ api() {
 extract_token() {
   local response="$1"
   local token
-  token="$(printf '%s' "${response}" | jq -r '.token')"
-  if [[ -z "${token}" || "${token}" == "null" ]]; then
+  # Use '// empty' so jq converts null → "", and suppress parse errors with
+  # || true so that a non-JSON/empty response falls through to the fail below
+  # instead of aborting with an opaque jq error under set -Eeuo pipefail.
+  token="$(printf '%s' "${response}" | jq -r '.token // empty' 2>/dev/null || true)"
+  if [[ -z "${token}" ]]; then
     local message
-    message="$(printf '%s' "${response}" | jq -r '.message // empty')"
+    message="$(printf '%s' "${response}" | jq -r '.message // empty' 2>/dev/null || true)"
     fail "API returned no token${message:+: ${message}}"
   fi
   printf '%s' "${token}"
@@ -144,11 +147,25 @@ runner_url() {
   fi
 }
 
+# Pre-computed remove token populated in main() so the PEM can be deleted
+# before config.sh / run.sh starts, preventing workflow jobs from reading it.
+RUNNER_REMOVE_TOKEN=""
+
 deregister_runner() {
-  local jwt installation_token remove_token
-  jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
-  installation_token="$(get_installation_token "${jwt}")"
-  remove_token="$(get_remove_token "${installation_token}")"
+  local remove_token="${RUNNER_REMOVE_TOKEN:-}"
+  if [[ -z "${remove_token}" ]]; then
+    # Startup failed before we pre-computed the token.  Try to re-fetch via
+    # PEM if it is still present (e.g. startup error before deletion).
+    if [[ -f "/runner-tmp/github-app.pem" ]]; then
+      local jwt installation_token
+      jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
+      installation_token="$(get_installation_token "${jwt}")"
+      remove_token="$(get_remove_token "${installation_token}")"
+    else
+      log 'Warning: no remove token and no PEM available; runner may need manual deregistration'
+      return 0
+    fi
+  fi
   ./config.sh remove --unattended --token "${remove_token}"
 }
 
@@ -245,6 +262,15 @@ main() {
   jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
   installation_token="$(get_installation_token "${jwt}")"
   registration_token="$(get_registration_token "${installation_token}")"
+  # Pre-compute the remove token while we have the installation token so we can
+  # delete the PEM immediately — before config.sh / run.sh starts.  Workflow
+  # jobs run as the same user that owns the PEM, so keeping it alive through the
+  # entire run would allow any job to read the GitHub App private key and mint
+  # new tokens.  Remove tokens expire after 1 hour, which is ample for the
+  # ephemeral runner lifecycle (register → single job → deregister).
+  RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")"
+  rm -f /runner-tmp/github-app.pem
+  log 'GitHub App PEM deleted — registration and remove tokens pre-computed'
   target_url="$(runner_url)"
 
   if [[ -n "${RUNNER_INSTANCE_NAME:-}" ]]; then
