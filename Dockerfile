@@ -19,7 +19,7 @@ COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh \
-    && mkdir -p /runner-tmp \
+    && mkdir -p /runner-tmp /home/runner/_work \
     && usermod -aG docker runner \
     && chown -R runner:docker /home/runner /runner-tmp
 
