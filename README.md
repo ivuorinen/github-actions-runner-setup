@@ -62,6 +62,8 @@ Copy one existing `runner-*` service in `docker-compose.yml` and change:
 - `RUNNER_INSTANCE_NAME`
 - the per-runner label variable (e.g. `RUNNER_1_LABELS`, `RUNNER_2_LABELS`, …)
 
-`RUNNER_DEFAULT_LABELS` provides the shared base labels applied to every runner, and each runner's `RUNNER_<N>_LABELS` adds runner-specific labels (mapped to `RUNNER_EXTRA_LABELS` inside the container). If you prefer to bypass that pattern you can set `RUNNER_LABELS` directly in the service environment instead.
+`RUNNER_DEFAULT_LABELS` provides the shared base labels applied to every runner, and each runner's
+`RUNNER_<N>_LABELS` adds runner-specific labels (mapped to `RUNNER_EXTRA_LABELS` inside the container).
+If you prefer to bypass that pattern you can set `RUNNER_LABELS` directly in the service environment instead.
 
 See `SETUP.md` for the complete setup flow.

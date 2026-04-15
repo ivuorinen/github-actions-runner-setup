@@ -18,7 +18,7 @@ if [[ "${command}" =~ git\ push.*--force($|[^-]) ]] || [[ "${command}" =~ git\ p
 fi
 
 # Also block git reset --hard on main/master
-if [[ "${command}" =~ git\ reset\ --hard ]] && [[ "$(git branch --show-current 2>/dev/null)" =~ ^(main|master)$ ]]; then
+if [[ "${command}" =~ git\ reset\ --hard ]] && [[ "$(git branch --show-current 2>/dev/null || true)" =~ ^(main|master)$ ]]; then
   echo "BLOCKED: git reset --hard on main/master is not allowed" >&2
   exit 2
 fi

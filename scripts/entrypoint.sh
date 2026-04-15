@@ -233,8 +233,8 @@ main() {
   # `docker inspect`). GITHUB_APP_PRIVATE_KEY_B64 is supported as a fallback for
   # environments that inject secrets only through environment variables (e.g. Coolify).
   if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
-    [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] \
-      || fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+    [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
+      fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
     install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
     # Unset the unused variable so it doesn't linger in child-process environments.
     unset GITHUB_APP_PRIVATE_KEY_B64
@@ -250,10 +250,16 @@ main() {
       rm -f "${pem_tmp}"
       fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 produced an empty file; verify it contains valid base64-encoded private key data"
     fi
-    grep -q -- '-----BEGIN .*PRIVATE KEY-----' "${pem_tmp}" \
-      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM BEGIN header; verify it contains the base64-encoded GitHub App private key"; }
-    grep -q -- '-----END .*PRIVATE KEY-----' "${pem_tmp}" \
-      || { rm -f "${pem_tmp}"; fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM END footer; verify it contains the base64-encoded GitHub App private key"; }
+    grep -q -- '-----BEGIN .*PRIVATE KEY-----' "${pem_tmp}" ||
+      {
+        rm -f "${pem_tmp}"
+        fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM BEGIN header; verify it contains the base64-encoded GitHub App private key"
+      }
+    grep -q -- '-----END .*PRIVATE KEY-----' "${pem_tmp}" ||
+      {
+        rm -f "${pem_tmp}"
+        fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM END footer; verify it contains the base64-encoded GitHub App private key"
+      }
     mv "${pem_tmp}" /runner-tmp/github-app.pem
     unset GITHUB_APP_PRIVATE_KEY_B64
   fi
