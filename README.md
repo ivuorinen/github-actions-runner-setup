@@ -32,6 +32,11 @@ All runners mount:
 This means Docker pulls and image layers are shared through the host daemon.
 If your workflows repeatedly use the same container images for linters, scanners, or build tools, later jobs avoid re-pulling unchanged layers.
 
+## Requirements
+
+- Docker Engine 20.10+
+- Docker Compose v2.24+ (required for `env_file: required: false` support)
+
 ## Quick start
 
 1. Copy `.env.example` to `.env`

@@ -13,7 +13,7 @@ if [[ "${basename}" == "docker-compose.yml" || "${basename}" == "docker-compose.
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     if ! docker compose --project-directory "${compose_dir}" -f "${file_path}" config --quiet 2>/dev/null; then
       echo "WARNING: ${basename} has validation errors" >&2
-      docker compose --project-directory "${compose_dir}" -f "${file_path}" config 2>&1 | head -5 >&2
+      docker compose --project-directory "${compose_dir}" -f "${file_path}" config 2>&1 | head -5 >&2 || true
     fi
   fi
 fi

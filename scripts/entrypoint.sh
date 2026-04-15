@@ -306,6 +306,21 @@ main() {
 
   ./config.sh "${config_args[@]}"
 
+  # Unset variables that are no longer needed after registration so they do not
+  # leak into runner job subprocesses.  Variables required for cleanup/
+  # deregistration are intentionally kept:
+  #   - GITHUB_API_URL, RUNNER_SCOPE, GITHUB_ORG, GITHUB_REPO_*: used by
+  #     get_remove_token() / api() during deregister_runner
+  #   - GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID: used by the fallback path
+  #     in deregister_runner when RUNNER_REMOVE_TOKEN is empty and the PEM
+  #     is still present (early-startup-failure recovery)
+  #   - RUNNER_REMOVE_TOKEN: the pre-computed remove token itself
+  if [[ "${UNSET_CONFIG_VARS:-true}" == "true" ]]; then
+    log 'Unsetting post-registration configuration variables'
+    unset RUNNER_DEFAULT_LABELS RUNNER_EXTRA_LABELS RUNNER_LABELS RUNNER_GROUP
+    unset RUNNER_INSTANCE_NAME RUNNER_WORKDIR GITHUB_WEB_URL
+  fi
+
   log 'Starting runner listener'
   ./run.sh
 }

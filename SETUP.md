@@ -2,6 +2,11 @@
 
 This document describes how to set up the repository from zero and deploy it through Coolify.
 
+## Prerequisites
+
+- **Docker Engine** 20.10+
+- **Docker Compose** v2.24+ (required for the `env_file: required: false` syntax in `docker-compose.yml`)
+
 ## 1. Create the GitHub App
 
 Create a GitHub App owned by the organization if you want organization-level runners.
@@ -199,7 +204,8 @@ Example additional service:
     environment:
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -209,9 +215,7 @@ Example additional service:
       GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
       RUNNER_GROUP: ${RUNNER_GROUP:-Default}
       RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/home/runner/_work}
-      DISABLE_AUTO_UPDATE: ${DISABLE_AUTO_UPDATE:-1}
       UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
-      START_DOCKER_SERVICE: ${START_DOCKER_SERVICE:-false}
       RUNNER_INSTANCE_NAME: ${RUNNER_4_NAME:-}
       RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
       RUNNER_EXTRA_LABELS: ${RUNNER_4_LABELS:-lint,large}
