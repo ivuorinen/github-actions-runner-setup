@@ -200,6 +200,16 @@ main() {
   require_env RUNNER_SCOPE
   require_env RUNNER_WORKDIR
 
+  # Warn early if the Docker socket is mounted but not accessible — the most
+  # common cause is a GID mismatch between the host socket and the container's
+  # docker group.  Set DOCKER_GID in the environment (or docker-compose.yml
+  # group_add) to the host socket GID (stat -c '%g' /var/run/docker.sock).
+  if [[ -e /var/run/docker.sock ]] && ! docker info >/dev/null 2>&1; then
+    log 'Warning: /var/run/docker.sock is present but not accessible to this user.'
+    log 'Docker commands inside jobs will fail with permission denied.'
+    log "Set DOCKER_GID to $(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo '<socket GID>') in your environment to fix this."
+  fi
+
   # Default to the public GitHub endpoints when explicit values are not
   # provided (for example, when running outside docker-compose). GitHub
   # Enterprise Server users must override both variables for their instance.
@@ -272,8 +282,16 @@ main() {
   # delete the PEM immediately — before config.sh / run.sh starts.  Workflow
   # jobs run as the same user that owns the PEM, so keeping it alive through the
   # entire run would allow any job to read the GitHub App private key and mint
-  # new tokens.  Remove tokens expire after 1 hour, which is ample for the
-  # ephemeral runner lifecycle (register → single job → deregister).
+  # new tokens.
+  # The primary deregistration path for ephemeral runners is the GitHub Actions
+  # service itself: when --ephemeral is passed to config.sh, the runner
+  # automatically unregisters after completing one job.  The remove token /
+  # config.sh remove call in cleanup() is a safety net for abnormal exits
+  # (container killed before picking up a job, startup failure, SIGTERM).
+  # Remove tokens expire after 1 hour — sufficient for the startup→job window
+  # of an ephemeral runner.  Idle waits longer than 1 hour are not expected;
+  # if they occur the fallback path in deregister_runner() will re-fetch a
+  # fresh token from the PEM if it is still available.
   RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")"
   rm -f /runner-tmp/github-app.pem
   log 'GitHub App PEM deleted — registration and remove tokens pre-computed'

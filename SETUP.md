@@ -263,6 +263,19 @@ Check that workflow `runs-on` labels exactly match the labels configured for at 
 
 Check that the Docker socket mount is present and that the host daemon is running.
 
+If the socket is present but jobs still get `permission denied`, the container's
+`docker` group GID does not match the host socket GID.  Fix:
+
+```bash
+# Find the host socket GID
+stat -c '%g' /var/run/docker.sock
+```
+
+Set that value as `DOCKER_GID` in your `.env` (or as a Coolify environment variable).
+The `group_add` entry in `docker-compose.yml` will add the runner process to that
+supplementary group at startup.  The entrypoint logs a warning with the correct GID
+if the socket is inaccessible at startup.
+
 ### Coolify deployment succeeds but runners are offline
 
 Check whether Coolify allows mounting `/var/run/docker.sock` for this app and whether the environment variables were injected correctly.

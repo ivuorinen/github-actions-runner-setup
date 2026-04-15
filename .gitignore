@@ -1,7 +1,10 @@
 .env
 .env.local
 .env.production
+.env.*
 secrets/
+*.pem
+*.key
 *.log
 *.tmp
 *.pid

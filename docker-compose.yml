@@ -12,6 +12,12 @@ x-runner-common: &runner-common
       required: false
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
+  # group_add aligns the container's docker group GID with the host socket so
+  # that jobs can run docker commands.  Set DOCKER_GID to the GID of the host
+  # docker socket (stat -c '%g' /var/run/docker.sock).  Leave unset or empty to
+  # skip; entrypoint.sh will warn at startup if the socket is inaccessible.
+  group_add:
+    - "${DOCKER_GID:-}"
   tmpfs:
     - /tmp:size=1g,exec
     - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
