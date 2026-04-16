@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.*
+secrets/
+*.log
+*.tmp
+*.swp
+node_modules/
+dist/
+build/

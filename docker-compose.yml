@@ -1,0 +1,106 @@
+---
+name: github-actions-runners
+
+x-runner-common: &runner-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: ${RUNNER_IMAGE_NAME:-local/github-app-actions-runner:latest}
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+  # group_add aligns the container's docker group GID with the host socket so
+  # that jobs can run docker commands.  Set DOCKER_GID to the GID of the host
+  # docker socket (stat -c '%g' /var/run/docker.sock).  When unset, falls back
+  # to the container's docker group; entrypoint.sh warns at startup if the
+  # socket is still inaccessible after group resolution.
+  group_add:
+    - "${DOCKER_GID:-docker}"
+  tmpfs:
+    - /tmp:size=1g,exec
+    - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  runner-1:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-1
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      # Provide the private key via GITHUB_APP_PRIVATE_KEY_B64 (base64 env var,
+      # visible in `docker inspect`) OR via GITHUB_APP_PRIVATE_KEY_FILE (path to a
+      # mounted file — preferred; avoids storing the key in the container config).
+      # To use a mounted file: add a volume/secret mount and set
+      # GITHUB_APP_PRIVATE_KEY_FILE to the path inside the container, e.g.
+      # /run/secrets/github_app_key. Leave the other variable empty.
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/home/runner/_work}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      RUNNER_INSTANCE_NAME: ${RUNNER_1_NAME:-}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_1_LABELS:-lint,small}
+
+  runner-2:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-2
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/home/runner/_work}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      RUNNER_INSTANCE_NAME: ${RUNNER_2_NAME:-}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_2_LABELS:-lint,medium}
+
+  runner-3:
+    <<: *runner-common
+    hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-3
+    environment:
+      GITHUB_APP_ID: ${GITHUB_APP_ID}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
+      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_HOST: ${GITHUB_HOST:-github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
+      GITHUB_REPO_NAME: ${GITHUB_REPO_NAME:-}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/home/runner/_work}
+      UNSET_CONFIG_VARS: ${UNSET_CONFIG_VARS:-true}
+      RUNNER_INSTANCE_NAME: ${RUNNER_3_NAME:-}
+      RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
+      RUNNER_EXTRA_LABELS: ${RUNNER_3_LABELS:-general}
+
+# To add another runner, copy one of the runner-* services and change:
+# - service name
+# - hostname
+# - RUNNER_INSTANCE_NAME variable
+# - RUNNER_EXTRA_LABELS variable (per-runner labels; combined with RUNNER_DEFAULT_LABELS
+#   by entrypoint.sh to form the final label set passed to config.sh)
