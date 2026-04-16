@@ -185,7 +185,9 @@ cleanup() {
 }
 
 main() {
-  trap cleanup EXIT INT TERM
+  trap cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
   require_env GITHUB_APP_ID
   require_env GITHUB_APP_INSTALLATION_ID
