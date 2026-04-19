@@ -219,6 +219,8 @@ main() {
   elif [[ "${RUNNER_SCOPE}" == "repo" ]]; then
     require_env GITHUB_REPO_OWNER
     require_env GITHUB_REPO_NAME
+  else
+    fail "RUNNER_SCOPE must be 'org' or 'repo', got: ${RUNNER_SCOPE}"
   fi
 
   umask 077
