@@ -20,5 +20,5 @@ if printf '%s' "${content}" | grep -qE '(extract_token|get_.*_token|make_jwt|cle
   echo "NOTE: This edit touches security-critical token handling code." >&2
   echo "  - Verify extract_token() still validates null/empty responses" >&2
   echo "  - Verify cleanup() subshell isolates fail() from PEM deletion" >&2
-  echo "  - Verify GITHUB_APP_PRIVATE_KEY_B64 is unset after use" >&2
+  echo "  - Verify PEM is read from GITHUB_APP_PRIVATE_KEY_FILE (bind-mount), copied to tmpfs, then deleted before run.sh" >&2
 fi
