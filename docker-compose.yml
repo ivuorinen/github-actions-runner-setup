@@ -23,6 +23,27 @@ x-runner-common: &runner-common
     - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
   security_opt:
     - no-new-privileges:true
+  # Drop all Linux capabilities and re-add only the minimum needed:
+  #   SETGID/SETUID   — gosu drop-privs from root entrypoint to runner user
+  #   CHOWN/FOWNER    — actions-runner extracts tarballs with various owners
+  #   DAC_OVERRIDE    — some upstream setup-* actions assume this is present
+  #   KILL            — runner manages child worker processes
+  # Everything else (NET_RAW, NET_BIND_SERVICE, SYS_CHROOT, MKNOD,
+  # AUDIT_WRITE, SETFCAP, SETPCAP, FSETID) is dropped for defense in depth.
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    - KILL
+  # Resource limits prevent a single runaway workflow from DoS-ing the host
+  # and its sibling runners. Tune to host capacity.
+  mem_limit: ${RUNNER_MEM_LIMIT:-4g}
+  cpus: ${RUNNER_CPUS:-2}
+  pids_limit: ${RUNNER_PIDS_LIMIT:-1024}
 
 services:
   runner-1:
