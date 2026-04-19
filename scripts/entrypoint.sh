@@ -191,28 +191,9 @@ main() {
 
   require_env GITHUB_APP_ID
   require_env GITHUB_APP_INSTALLATION_ID
-  # Require exactly one of: a pre-mounted key file (preferred, not stored in
-  # container env/config) or a base64-encoded key in the environment.
-  if [[ -z "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -z "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
-    fail "Exactly one of GITHUB_APP_PRIVATE_KEY_FILE or GITHUB_APP_PRIVATE_KEY_B64 must be set"
-  fi
-  if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -n "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
-    fail "GITHUB_APP_PRIVATE_KEY_FILE and GITHUB_APP_PRIVATE_KEY_B64 cannot both be set; choose one"
-  fi
+  require_env GITHUB_APP_PRIVATE_KEY_FILE
   require_env RUNNER_SCOPE
   require_env RUNNER_WORKDIR
-
-  # Warn when the GitHub App private key is injected via environment variable.
-  # Docker stores all environment variables in the container config; the value
-  # is readable by anyone with Docker API access (including jobs on sibling
-  # runners through the socket proxy).  Use GITHUB_APP_PRIVATE_KEY_FILE
-  # (a mounted secret) to eliminate this exposure.
-  if [[ -n "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
-    log 'WARNING: GITHUB_APP_PRIVATE_KEY_B64 is set. The private key is visible'
-    log 'WARNING: in `docker inspect` output for the lifetime of this container.'
-    log 'WARNING: Any process with Docker API access can read it. Use'
-    log 'WARNING: GITHUB_APP_PRIVATE_KEY_FILE (mounted secret) to eliminate this.'
-  fi
 
   # Default to the public GitHub endpoints when explicit values are not
   # provided (for example, when running outside docker-compose). GitHub
@@ -241,42 +222,9 @@ main() {
   fi
 
   umask 077
-  # Populate /runner-tmp/github-app.pem from whichever source is configured.
-  # GITHUB_APP_PRIVATE_KEY_FILE (a mounted file) is preferred because it avoids
-  # storing the secret in the container's environment/config (visible via
-  # `docker inspect`). GITHUB_APP_PRIVATE_KEY_B64 is supported as a fallback for
-  # environments that inject secrets only through environment variables (e.g. Coolify).
-  if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" ]]; then
-    [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
-      fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
-    install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
-    # Unset the unused variable so it doesn't linger in child-process environments.
-    unset GITHUB_APP_PRIVATE_KEY_B64
-  else
-    local pem_tmp
-    pem_tmp="/runner-tmp/github-app.pem.tmp"
-    rm -f "${pem_tmp}"
-    if ! printf '%s' "${GITHUB_APP_PRIVATE_KEY_B64}" | base64 -d >"${pem_tmp}" 2>/dev/null; then
-      rm -f "${pem_tmp}"
-      fail "Failed to decode GITHUB_APP_PRIVATE_KEY_B64; verify it contains valid base64-encoded private key data"
-    fi
-    if [[ ! -s "${pem_tmp}" ]]; then
-      rm -f "${pem_tmp}"
-      fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 produced an empty file; verify it contains valid base64-encoded private key data"
-    fi
-    grep -q -- '-----BEGIN .*PRIVATE KEY-----' "${pem_tmp}" ||
-      {
-        rm -f "${pem_tmp}"
-        fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM BEGIN header; verify it contains the base64-encoded GitHub App private key"
-      }
-    grep -q -- '-----END .*PRIVATE KEY-----' "${pem_tmp}" ||
-      {
-        rm -f "${pem_tmp}"
-        fail "Decoded GITHUB_APP_PRIVATE_KEY_B64 is missing the PEM END footer; verify it contains the base64-encoded GitHub App private key"
-      }
-    mv "${pem_tmp}" /runner-tmp/github-app.pem
-    unset GITHUB_APP_PRIVATE_KEY_B64
-  fi
+  [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
+    fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+  install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"

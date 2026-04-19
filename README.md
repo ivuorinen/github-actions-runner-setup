@@ -25,12 +25,10 @@ Each runner container:
 
 ## Shared image cache
 
-All runners mount:
-
-- `/var/run/docker.sock:/var/run/docker.sock`
-
-This means Docker pulls and image layers are shared through the host daemon.
-If your workflows repeatedly use the same container images for linters, scanners, or build tools, later jobs avoid re-pulling unchanged layers.
+All runners connect to Docker through the `socket-proxy` sidecar, which in turn
+mounts the host socket. Docker pulls and image layers are shared through the host
+daemon — if your workflows repeatedly use the same container images, later jobs
+avoid re-pulling unchanged layers.
 
 ## Requirements
 
@@ -47,19 +45,21 @@ socket directly — `DOCKER_HOST` is set to the proxy's TCP endpoint instead.
 This prevents workflow jobs from using the raw socket to inspect sibling
 runner containers or bind-mount the host filesystem.
 
-Note: the proxy still permits `--privileged` container creation if a job
-explicitly requests it. Full elimination of that vector requires rootless Docker
-on the host. Ensure only trusted workflows target these runners — see the
-operational notes in `SETUP.md`.
+Note: the proxy allows `docker build` and `docker pull` but disables container
+creation and inspection (`CONTAINERS` is not enabled). This blocks `docker run`
+and prevents jobs from inspecting sibling runner containers. If jobs need
+`docker run`, add `CONTAINERS: 1` to the socket-proxy environment and note
+that this re-enables cross-runner container inspection. Ensure only trusted
+workflows target these runners — see the operational notes in `SETUP.md`.
 
 ### GitHub App private key
 
-Prefer `GITHUB_APP_PRIVATE_KEY_FILE` (a file mounted into the container) over
-`GITHUB_APP_PRIVATE_KEY_B64`. The base64 env var is stored in Docker's
-container config and is readable via `docker inspect` for the lifetime of the
-container. The `GITHUB_APP_PRIVATE_KEY_FILE` path is not stored in the
-container config. When `GITHUB_APP_PRIVATE_KEY_B64` is used, the runner logs a
-warning at startup.
+The runner requires `GITHUB_APP_PRIVATE_KEY_FILE` — a path to the PEM file
+mounted into the container (e.g. via a Docker secret or bind-mount). Only the
+file path is stored in the container config; the key material is never exposed
+via `docker inspect`. Mount the PEM as a Docker secret or a read-only
+bind-mount and set `GITHUB_APP_PRIVATE_KEY_FILE` to its path inside the
+container.
 
 ## Quick start
 

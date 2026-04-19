@@ -27,14 +27,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      # Provide the private key via GITHUB_APP_PRIVATE_KEY_B64 (base64 env var,
-      # visible in `docker inspect`) OR via GITHUB_APP_PRIVATE_KEY_FILE (path to a
-      # mounted file — preferred; avoids storing the key in the container config).
-      # To use a mounted file: add a volume/secret mount and set
-      # GITHUB_APP_PRIVATE_KEY_FILE to the path inside the container, e.g.
-      # /run/secrets/github_app_key. Leave the other variable empty.
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -56,8 +49,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -79,8 +71,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -100,11 +91,17 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
     environment:
-      CONTAINERS: 1
+      # Allowed: image pull/build operations only.
+      # CONTAINERS is intentionally omitted: enabling it allows workflow jobs to
+      # call GET /containers/{id}/json on sibling runners and read their
+      # environment variables, and POST /containers/{id}/exec to run arbitrary
+      # commands inside a sibling runner container.
+      # If workflow jobs require `docker run`, add CONTAINERS: 1 and document
+      # the cross-runner inspection risk in your security model.
       IMAGES: 1
-      NETWORKS: 1
-      VOLUMES: 1
       BUILD: 1
       POST: 1
       INFO: 1

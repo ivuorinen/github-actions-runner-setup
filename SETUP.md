@@ -38,21 +38,27 @@ Record these values:
 - **Installation ID**
 - **Private key PEM file**
 
-## 2. Prepare the private key for environment-variable use
+## 2. Prepare the private key for mounting
 
-Linux:
+Place the PEM file somewhere accessible to Docker on the host. The recommended
+approach is a Docker secret or a read-only bind-mount. The path inside the
+container must be set as `GITHUB_APP_PRIVATE_KEY_FILE`.
 
-```bash
-base64 -w0 my-github-app.private-key.pem
-```
-
-macOS:
+Example using a bind-mount (simplest):
 
 ```bash
-base64 -i my-github-app.private-key.pem | tr -d '\n'
+# Copy the PEM to a directory Docker can reach, e.g.:
+cp my-github-app.private-key.pem /etc/github-app/private-key.pem
+chmod 600 /etc/github-app/private-key.pem
 ```
 
-Copy the resulting single-line base64 value.
+Then in your runner service (or `.env`):
+
+```dotenv
+GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github_app_key
+```
+
+And add the mount to the runner service (or use a Docker secret — see step 6).
 
 ## 3. Prepare the repository
 
@@ -67,7 +73,7 @@ Fill at least these values:
 ```dotenv
 GITHUB_APP_ID=...
 GITHUB_APP_INSTALLATION_ID=...
-GITHUB_APP_PRIVATE_KEY_B64=...
+GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github_app_key
 RUNNER_SCOPE=org
 GITHUB_ORG=your-org
 RUNNER_GROUP=Default
@@ -130,7 +136,7 @@ Minimum required values:
 
 - `GITHUB_APP_ID`
 - `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY_B64`
+- `GITHUB_APP_PRIVATE_KEY_FILE` (path to the PEM mounted into the container)
 - `RUNNER_SCOPE`
 - `GITHUB_ORG` or `GITHUB_REPO_OWNER` + `GITHUB_REPO_NAME`
 
@@ -140,6 +146,13 @@ Runner containers do not mount the host socket directly. A `socket-proxy`
 sidecar service (`tecnativa/docker-socket-proxy`) mounts the socket and
 exposes a restricted TCP endpoint at `tcp://socket-proxy:2375`. Runners
 connect through this proxy via `DOCKER_HOST`.
+
+The proxy is configured to allow image pulls and builds only. Container
+inspection and listing (`CONTAINERS`) are intentionally disabled to prevent
+workflow jobs from reading the environment variables of sibling runner
+containers. If your jobs require `docker run`, add `CONTAINERS: 1` to the
+`socket-proxy` environment and note that this re-enables cross-runner
+container inspection.
 
 Your Coolify Docker host must allow the socket mount for the `socket-proxy`
 service. Without it, Docker image caching and container-based jobs will fail.
@@ -205,8 +218,7 @@ Example additional service:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
