@@ -37,6 +37,30 @@ If your workflows repeatedly use the same container images for linters, scanners
 - Docker Engine 20.10+
 - Docker Compose v2.24+ (required for `env_file: required: false` support)
 
+## Security
+
+### Docker socket proxy
+
+Runners connect to the Docker daemon through a `socket-proxy` sidecar service
+(`tecnativa/docker-socket-proxy`). Runner containers do not hold the host
+socket directly — `DOCKER_HOST` is set to the proxy's TCP endpoint instead.
+This prevents workflow jobs from using the raw socket to inspect sibling
+runner containers or bind-mount the host filesystem.
+
+Note: the proxy still permits `--privileged` container creation if a job
+explicitly requests it. Full elimination of that vector requires rootless Docker
+on the host. Ensure only trusted workflows target these runners — see the
+operational notes in `SETUP.md`.
+
+### GitHub App private key
+
+Prefer `GITHUB_APP_PRIVATE_KEY_FILE` (a file mounted into the container) over
+`GITHUB_APP_PRIVATE_KEY_B64`. The base64 env var is stored in Docker's
+container config and is readable via `docker inspect` for the lifetime of the
+container. The `GITHUB_APP_PRIVATE_KEY_FILE` path is not stored in the
+container config. When `GITHUB_APP_PRIVATE_KEY_B64` is used, the runner logs a
+warning at startup.
+
 ## Quick start
 
 1. Copy `.env.example` to `.env`

@@ -136,13 +136,13 @@ Minimum required values:
 
 ### Host Docker socket
 
-This repository mounts:
+Runner containers do not mount the host socket directly. A `socket-proxy`
+sidecar service (`tecnativa/docker-socket-proxy`) mounts the socket and
+exposes a restricted TCP endpoint at `tcp://socket-proxy:2375`. Runners
+connect through this proxy via `DOCKER_HOST`.
 
-```yaml
-- /var/run/docker.sock:/var/run/docker.sock
-```
-
-Your Coolify Docker host must allow this mount. Without it, shared Docker image cache will not work, and container-based jobs that depend on host Docker will fail.
+Your Coolify Docker host must allow the socket mount for the `socket-proxy`
+service. Without it, Docker image caching and container-based jobs will fail.
 
 ## 7. Verify runner visibility in GitHub
 
@@ -202,6 +202,7 @@ Example additional service:
     <<: *runner-common
     hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-4
     environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
       GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
@@ -261,20 +262,25 @@ Check that workflow `runs-on` labels exactly match the labels configured for at 
 
 ### Docker commands fail inside jobs
 
-Check that the Docker socket mount is present and that the host daemon is running.
-
-If the socket is present but jobs still get `permission denied`, the container's
-`docker` group GID does not match the host socket GID.  Fix:
+Check that the `socket-proxy` service is running:
 
 ```bash
-# Find the host socket GID
-stat -c '%g' /var/run/docker.sock
+docker compose ps socket-proxy
 ```
 
-Set that value as `DOCKER_GID` in your `.env` (or as a Coolify environment variable).
-The `group_add` entry in `docker-compose.yml` will add the runner process to that
-supplementary group at startup.  The entrypoint logs a warning with the correct GID
-if the socket is inaccessible at startup.
+It should show `running` state. If it is not running, check its logs:
+
+```bash
+docker compose logs socket-proxy
+```
+
+The most common cause is that `/var/run/docker.sock` is not accessible on the
+host or that the Coolify deployment does not permit the socket mount for the
+`socket-proxy` service. Confirm the socket exists on the host:
+
+```bash
+ls -la /var/run/docker.sock
+```
 
 ### Coolify deployment succeeds but runners are offline
 

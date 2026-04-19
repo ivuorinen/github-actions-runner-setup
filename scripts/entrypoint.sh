@@ -202,14 +202,16 @@ main() {
   require_env RUNNER_SCOPE
   require_env RUNNER_WORKDIR
 
-  # Warn early if the Docker socket is mounted but not accessible — the most
-  # common cause is a GID mismatch between the host socket and the container's
-  # docker group.  Set DOCKER_GID in the environment (or docker-compose.yml
-  # group_add) to the host socket GID (stat -c '%g' /var/run/docker.sock).
-  if [[ -e /var/run/docker.sock ]] && ! docker info >/dev/null 2>&1; then
-    log 'Warning: /var/run/docker.sock is present but not accessible to this user.'
-    log 'Docker commands inside jobs will fail with permission denied.'
-    log "Set DOCKER_GID to $(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo '<socket GID>') in your environment to fix this."
+  # Warn when the GitHub App private key is injected via environment variable.
+  # Docker stores all environment variables in the container config; the value
+  # is readable by anyone with Docker API access (including jobs on sibling
+  # runners through the socket proxy).  Use GITHUB_APP_PRIVATE_KEY_FILE
+  # (a mounted secret) to eliminate this exposure.
+  if [[ -n "${GITHUB_APP_PRIVATE_KEY_B64:-}" ]]; then
+    log 'WARNING: GITHUB_APP_PRIVATE_KEY_B64 is set. The private key is visible'
+    log 'WARNING: in `docker inspect` output for the lifetime of this container.'
+    log 'WARNING: Any process with Docker API access can read it. Use'
+    log 'WARNING: GITHUB_APP_PRIVATE_KEY_FILE (mounted secret) to eliminate this.'
   fi
 
   # Default to the public GitHub endpoints when explicit values are not
