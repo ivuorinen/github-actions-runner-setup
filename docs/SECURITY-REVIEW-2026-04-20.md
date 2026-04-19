@@ -19,7 +19,7 @@ Methodology: static review (SAST, SCA, secret scanning, IaC, manual code review)
   checkov (dockerfile + github_actions), hadolint (1 warn), gitleaks (fs +
   full git history, 22 commits), trufflehog, trivy fs + image, and opengrep
   all pass. Existing pre-commit hygiene is already extensive.
-- **Manual-review findings: 1 High, 3 Medium, 6 Low, several informational.**
+- **Manual-review findings: 1 High, 3 Medium, 5 Low, several informational.**
   All concentrated in two architectural choices — PEM lifetime in the
   container, and pre-computation of the runner remove token — both of
   which expose secrets to workflow jobs.
