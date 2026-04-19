@@ -224,14 +224,22 @@ main() {
   fi
 
   umask 077
+  [[ "$(id -u)" == "0" ]] ||
+    fail "This entrypoint must start as root so the GitHub App private key can remain root-only during bootstrap; mount ${GITHUB_APP_PRIVATE_KEY_FILE} as a root-owned secret and drop privileges before starting the runner"
   [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
     fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
-  [[ -r "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
-    fail "Key file is not readable by the runner user (UID $(id -u)): ${GITHUB_APP_PRIVATE_KEY_FILE} — run: chown $(id -u) ${GITHUB_APP_PRIVATE_KEY_HOST_PATH:-<host-path>} on the Docker host"
-  install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
+
+  local key_uid key_mode
+  key_uid="$(stat -c '%u' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
+  [[ "${key_uid}" == "0" ]] ||
+    fail "Key file must be owned by root so workflow jobs cannot read it: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+
+  key_mode="$(stat -c '%a' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
+  (( (8#${key_mode}) & 077 == 0 )) ||
+    fail "Key file permissions must not grant any access to group or other users: ${GITHUB_APP_PRIVATE_KEY_FILE}"
 
   local jwt installation_token registration_token target_url runner_name
-  jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
+  jwt="$(make_jwt "${GITHUB_APP_ID}" "${GITHUB_APP_PRIVATE_KEY_FILE}")"
   installation_token="$(get_installation_token "${jwt}")"
   registration_token="$(get_registration_token "${installation_token}")"
   # Pre-compute the remove token while we have the installation token so we can
