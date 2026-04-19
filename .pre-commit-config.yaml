@@ -39,7 +39,7 @@ repos:
     rev: v0.11.0
     hooks:
       - id: shellcheck
-        args: ["--severity=warning"]
+        args: ["--severity=style"]
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
