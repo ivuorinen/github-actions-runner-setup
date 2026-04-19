@@ -147,26 +147,28 @@ runner_url() {
   fi
 }
 
-# Pre-computed remove token populated in main() so the PEM can be deleted
-# before config.sh / run.sh starts, preventing workflow jobs from reading it.
+# Pre-computed remove token populated in main() so cleanup does not need to
+# re-sign a JWT on shutdown.  If population fails (e.g. startup error before
+# main() reaches that point), deregister_runner falls back to re-fetching
+# from the still-mounted PEM.
 RUNNER_REMOVE_TOKEN=""
 
 deregister_runner() {
   local remove_token="${RUNNER_REMOVE_TOKEN}"
   if [[ -z "${remove_token}" ]]; then
-    # Startup failed before we pre-computed the token.  Try to re-fetch via
-    # PEM if it is still present (e.g. startup error before deletion).
-    if [[ -f "/runner-tmp/github-app.pem" ]]; then
+    if [[ -n "${GITHUB_APP_PRIVATE_KEY_FILE:-}" && -r "${GITHUB_APP_PRIVATE_KEY_FILE}" ]]; then
       local jwt installation_token
-      jwt="$(make_jwt "${GITHUB_APP_ID}" "/runner-tmp/github-app.pem")"
+      jwt="$(make_jwt "${GITHUB_APP_ID}" "${GITHUB_APP_PRIVATE_KEY_FILE}")"
       installation_token="$(get_installation_token "${jwt}")"
       remove_token="$(get_remove_token "${installation_token}")"
     else
-      log 'Warning: no remove token and no PEM available; runner may need manual deregistration'
+      log 'Warning: no remove token and no readable PEM available; runner may need manual deregistration'
       return 0
     fi
   fi
-  ./config.sh remove --unattended --token "${remove_token}"
+  # Runs as the runner user for the same reasons as the registration call:
+  # config.sh expects to operate against a runner-owned .runner state file.
+  gosu runner ./config.sh remove --unattended --token "${remove_token}"
 }
 
 cleanup() {
@@ -176,11 +178,10 @@ cleanup() {
   if [[ -f ".runner" ]]; then
     log 'Removing runner registration'
     # Run in a subshell so that exit/fail inside deregister_runner cannot
-    # abort the rest of cleanup (specifically: PEM deletion below).
+    # abort the rest of cleanup.
     (deregister_runner) || log 'Warning: failed to deregister runner'
   fi
 
-  rm -f /runner-tmp/github-app.pem
   exit "${exit_code}"
 }
 
@@ -224,41 +225,41 @@ main() {
   fi
 
   umask 077
-  [[ "$(id -u)" == "0" ]] ||
-    fail "This entrypoint must start as root so the GitHub App private key can remain root-only during bootstrap; mount ${GITHUB_APP_PRIVATE_KEY_FILE} as a root-owned secret and drop privileges before starting the runner"
+  # Entrypoint must run as root so the PEM can be owned by UID 0 (unreadable
+  # by the runner user). After token exchange, main() drops privileges to
+  # the runner user via gosu before exec'ing config.sh and run.sh.
+  [[ "$(id -u)" -eq 0 ]] ||
+    fail "entrypoint.sh must run as root (UID 0), got UID $(id -u) — do not set 'user:' in docker-compose.yml"
+
   [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
     fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+  [[ -r "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
+    fail "Key file is not readable by root: ${GITHUB_APP_PRIVATE_KEY_FILE} — on the Docker host run: chown 0:0 <pem> && chmod 600 <pem>"
 
-  local key_uid key_mode
-  key_uid="$(stat -c '%u' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
-  [[ "${key_uid}" == "0" ]] ||
-    fail "Key file must be owned by root so workflow jobs cannot read it: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+  local key_owner key_mode
+  key_owner="$(stat -c '%u' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
+  [[ "${key_owner}" == "0" ]] ||
+    fail "Key file must be owned by UID 0 (root) inside the container so the runner user cannot read it; got UID ${key_owner}. On the Docker host run: chown 0:0 ${GITHUB_APP_PRIVATE_KEY_FILE}"
 
   key_mode="$(stat -c '%a' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
-  (( (8#${key_mode}) & 077 == 0 )) ||
+  (((8#${key_mode}) & 077 == 0)) ||
     fail "Key file permissions must not grant any access to group or other users: ${GITHUB_APP_PRIVATE_KEY_FILE}"
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "${GITHUB_APP_PRIVATE_KEY_FILE}")"
   installation_token="$(get_installation_token "${jwt}")"
   registration_token="$(get_registration_token "${installation_token}")"
-  # Pre-compute the remove token while we have the installation token so we can
-  # delete the PEM immediately — before config.sh / run.sh starts.  Workflow
-  # jobs run as the same user that owns the PEM, so keeping it alive through the
-  # entire run would allow any job to read the GitHub App private key and mint
-  # new tokens.
+  # Pre-compute the remove token while we still hold the installation token
+  # so cleanup does not need to re-sign a fresh JWT on shutdown.
   # The primary deregistration path for ephemeral runners is the GitHub Actions
   # service itself: when --ephemeral is passed to config.sh, the runner
   # automatically unregisters after completing one job.  The remove token /
   # config.sh remove call in cleanup() is a safety net for abnormal exits
   # (container killed before picking up a job, startup failure, SIGTERM).
   # Remove tokens expire after 1 hour — sufficient for the startup→job window
-  # of an ephemeral runner.  Idle waits longer than 1 hour are not expected;
-  # if they occur the fallback path in deregister_runner() will re-fetch a
-  # fresh token from the PEM if it is still available.
+  # of an ephemeral runner.  If the wait exceeds that, deregister_runner()
+  # re-fetches a fresh token from the still-mounted PEM.
   RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")"
-  rm -f /runner-tmp/github-app.pem
-  log 'GitHub App PEM deleted — registration and remove tokens pre-computed'
   target_url="$(runner_url)"
 
   if [[ -n "${RUNNER_INSTANCE_NAME:-}" ]]; then
@@ -286,25 +287,33 @@ main() {
     config_args+=(--runnergroup "${RUNNER_GROUP}")
   fi
 
-  ./config.sh "${config_args[@]}"
+  # config.sh is invoked as the runner user: (a) upstream expects non-root,
+  # (b) the .runner state file and runner work dir need runner ownership,
+  # (c) keeps the root bash process (which holds RUNNER_REMOVE_TOKEN in
+  # memory) isolated from the registration subprocess.
+  gosu runner ./config.sh "${config_args[@]}"
 
-  # Unset variables that are no longer needed after registration so they do not
-  # leak into runner job subprocesses.  Variables required for cleanup/
+  # Unset variables that are no longer needed after registration so they do
+  # not leak into runner job subprocesses. Variables required for cleanup/
   # deregistration are intentionally kept:
   #   - GITHUB_API_URL, RUNNER_SCOPE, GITHUB_ORG, GITHUB_REPO_*: used by
   #     get_remove_token() / api() during deregister_runner
   #   - GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID: used by the fallback path
   #     in deregister_runner when RUNNER_REMOVE_TOKEN is empty and the PEM
   #     is still present (early-startup-failure recovery)
-  #   - RUNNER_REMOVE_TOKEN: the pre-computed remove token itself
+  #   - RUNNER_REMOVE_TOKEN: non-exported shell variable, lives in bash
+  #     memory only (not in child env)
   if [[ "${UNSET_CONFIG_VARS:-true}" == "true" ]]; then
     log 'Unsetting post-registration configuration variables'
     unset RUNNER_DEFAULT_LABELS RUNNER_EXTRA_LABELS RUNNER_LABELS RUNNER_GROUP
     unset RUNNER_INSTANCE_NAME RUNNER_WORKDIR GITHUB_WEB_URL
   fi
 
+  # Run the listener as the runner user. The root bash process stays as
+  # parent so the EXIT trap can run deregister_runner with the pre-computed
+  # remove token.
   log 'Starting runner listener'
-  ./run.sh
+  gosu runner ./run.sh
 }
 
 main "$@"

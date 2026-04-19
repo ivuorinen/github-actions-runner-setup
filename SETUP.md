@@ -40,21 +40,31 @@ Record these values:
 
 ## 2. Prepare the private key
 
-Copy the PEM file to a permanent location on the Docker host. The runner
-process inside the container runs as **UID 1001** (`runner`), so the file must
-be owned by that UID and have mode 600:
+Copy the PEM file to a permanent location on the Docker host. The PEM must
+be owned by **root (UID 0)** with mode 600:
 
 ```bash
 cp my-github-app.private-key.pem /etc/github-app/private-key.pem
-chown 1001:1001 /etc/github-app/private-key.pem
+chown 0:0 /etc/github-app/private-key.pem
 chmod 600 /etc/github-app/private-key.pem
 ```
 
 `docker-compose.yml` bind-mounts `GITHUB_APP_PRIVATE_KEY_HOST_PATH` (the host
 path) into every runner container at `/run/secrets/github_app_key` (read-only).
-`entrypoint.sh` copies the key to a private 0700 tmpfs and deletes it
-immediately after the runner registers. The key is never stored in the
-container config and never appears in `docker inspect` output.
+`entrypoint.sh` runs as root inside the container, reads the PEM to mint the
+initial JWT, pre-computes the runner remove token, and then drops privileges
+via `gosu` before exec'ing `config.sh` and `run.sh`. Workflow jobs execute
+as UID 1001 (`runner`) and therefore **cannot read** the PEM (owner root,
+mode 600) or ptrace the root entrypoint under default
+`kernel.yama.ptrace_scope=1`.
+
+The key is never embedded in container configuration and never appears in
+`docker inspect` output.
+
+> **Migration from a previous version:** if your host PEM is currently
+> `chown 1001:1001`, change it to `chown 0:0` before pulling the updated
+> image. The entrypoint validates ownership at startup and will fail fast
+> otherwise.
 
 ## 3. Prepare the repository
 
