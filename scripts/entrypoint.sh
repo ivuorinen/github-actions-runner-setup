@@ -226,6 +226,8 @@ main() {
   umask 077
   [[ -f "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
     fail "Key file not found: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+  [[ -r "${GITHUB_APP_PRIVATE_KEY_FILE}" ]] ||
+    fail "Key file is not readable by the runner user (UID $(id -u)): ${GITHUB_APP_PRIVATE_KEY_FILE} — run: chown $(id -u) ${GITHUB_APP_PRIVATE_KEY_HOST_PATH:-<host-path>} on the Docker host"
   install -m 600 "${GITHUB_APP_PRIVATE_KEY_FILE}" /runner-tmp/github-app.pem
 
   local jwt installation_token registration_token target_url runner_name

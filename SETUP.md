@@ -40,18 +40,20 @@ Record these values:
 
 ## 2. Prepare the private key
 
-Copy the PEM file to a permanent location on the Docker host and tighten its
-permissions so only root can read it:
+Copy the PEM file to a permanent location on the Docker host. The runner
+process inside the container runs as **UID 1001** (`runner`), so the file must
+be owned by that UID and have mode 600:
 
 ```bash
 cp my-github-app.private-key.pem /etc/github-app/private-key.pem
+chown 1001:1001 /etc/github-app/private-key.pem
 chmod 600 /etc/github-app/private-key.pem
 ```
 
 `docker-compose.yml` bind-mounts `GITHUB_APP_PRIVATE_KEY_HOST_PATH` (the host
-path you set) into every runner container at `/run/secrets/github_app_key`
-(read-only). `entrypoint.sh` copies it to a 0700 tmpfs before use and deletes
-it immediately after the runner registers. The key is never stored in the
+path) into every runner container at `/run/secrets/github_app_key` (read-only).
+`entrypoint.sh` copies the key to a private 0700 tmpfs and deletes it
+immediately after the runner registers. The key is never stored in the
 container config and never appears in `docker inspect` output.
 
 ## 3. Prepare the repository

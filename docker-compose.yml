@@ -14,7 +14,7 @@ x-runner-common: &runner-common
   # GITHUB_APP_PRIVATE_KEY_HOST_PATH and appears inside the container at
   # /run/secrets/github_app_key (matched by GITHUB_APP_PRIVATE_KEY_FILE).
   volumes:
-    - ${GITHUB_APP_PRIVATE_KEY_HOST_PATH}:/run/secrets/github_app_key:ro
+    - ${GITHUB_APP_PRIVATE_KEY_HOST_PATH:?GITHUB_APP_PRIVATE_KEY_HOST_PATH must be set to the absolute host path of the GitHub App PEM file}:/run/secrets/github_app_key:ro
   # Runners reach the Docker daemon through socket-proxy (same Compose
   # project network) — they do not mount the host socket directly.
   # DOCKER_HOST is set per-service in each runner's environment block.

@@ -56,14 +56,16 @@ workflows target these runners — see the operational notes in `SETUP.md`.
 
 Set `GITHUB_APP_PRIVATE_KEY_HOST_PATH` to the absolute path of the PEM file
 on the Docker host. `docker-compose.yml` bind-mounts it read-only into every
-runner container at `/run/secrets/github_app_key`. `entrypoint.sh` copies it
-to a private tmpfs and deletes it before the runner starts accepting jobs —
+runner container at `/run/secrets/github_app_key`. The runner process runs as
+**UID 1001** (`runner`), so the host file must be owned by UID 1001 with mode
+600 (`chown 1001:1001 <pem> && chmod 600 <pem>`). `entrypoint.sh` copies the
+key to a private tmpfs and deletes it before the runner starts accepting jobs —
 the key material is never stored in the container config and never appears in
 `docker inspect` output.
 
 ## Quick start
 
-1. Copy the GitHub App PEM to the host: `cp my-app.pem /etc/github-app/private-key.pem && chmod 600 /etc/github-app/private-key.pem`
+1. Copy the GitHub App PEM to the host and set ownership to the runner UID: `cp my-app.pem /etc/github-app/private-key.pem && chown 1001:1001 /etc/github-app/private-key.pem && chmod 600 /etc/github-app/private-key.pem`
 2. Copy `.env.example` to `.env`
 3. Fill in `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_HOST_PATH`, and `RUNNER_SCOPE`
 4. Set `RUNNER_SCOPE=org` (and `GITHUB_ORG`) or `RUNNER_SCOPE=repo` (and `GITHUB_REPO_OWNER`/`GITHUB_REPO_NAME`)
