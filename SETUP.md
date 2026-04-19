@@ -38,27 +38,21 @@ Record these values:
 - **Installation ID**
 - **Private key PEM file**
 
-## 2. Prepare the private key for mounting
+## 2. Prepare the private key
 
-Place the PEM file somewhere accessible to Docker on the host. The recommended
-approach is a Docker secret or a read-only bind-mount. The path inside the
-container must be set as `GITHUB_APP_PRIVATE_KEY_FILE`.
-
-Example using a bind-mount (simplest):
+Copy the PEM file to a permanent location on the Docker host and tighten its
+permissions so only root can read it:
 
 ```bash
-# Copy the PEM to a directory Docker can reach, e.g.:
 cp my-github-app.private-key.pem /etc/github-app/private-key.pem
 chmod 600 /etc/github-app/private-key.pem
 ```
 
-Then in your runner service (or `.env`):
-
-```dotenv
-GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github_app_key
-```
-
-And add the mount to the runner service (or use a Docker secret — see step 6).
+`docker-compose.yml` bind-mounts `GITHUB_APP_PRIVATE_KEY_HOST_PATH` (the host
+path you set) into every runner container at `/run/secrets/github_app_key`
+(read-only). `entrypoint.sh` copies it to a 0700 tmpfs before use and deletes
+it immediately after the runner registers. The key is never stored in the
+container config and never appears in `docker inspect` output.
 
 ## 3. Prepare the repository
 
@@ -73,7 +67,7 @@ Fill at least these values:
 ```dotenv
 GITHUB_APP_ID=...
 GITHUB_APP_INSTALLATION_ID=...
-GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github_app_key
+GITHUB_APP_PRIVATE_KEY_HOST_PATH=/etc/github-app/private-key.pem
 RUNNER_SCOPE=org
 GITHUB_ORG=your-org
 RUNNER_GROUP=Default
@@ -136,7 +130,10 @@ Minimum required values:
 
 - `GITHUB_APP_ID`
 - `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY_FILE` (path to the PEM mounted into the container)
+- `GITHUB_APP_PRIVATE_KEY_HOST_PATH` — absolute path to the PEM file on the
+  Docker host (e.g. `/etc/github-app/private-key.pem`). Coolify must allow
+  the bind-mount for the runner services; configure this under the app's
+  volume settings if Coolify does not pick it up from the Compose file.
 - `RUNNER_SCOPE`
 - `GITHUB_ORG` or `GITHUB_REPO_OWNER` + `GITHUB_REPO_NAME`
 
@@ -218,7 +215,7 @@ Example additional service:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -259,7 +256,8 @@ Check:
 - installation target
 - installation ID
 - app ID
-- private key base64 value
+- `GITHUB_APP_PRIVATE_KEY_HOST_PATH` set and file exists on the host
+- PEM mounted correctly (check `docker compose exec runner-1 ls -la /run/secrets/`)
 - org or repo names
 
 Then inspect logs:

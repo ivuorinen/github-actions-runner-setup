@@ -10,6 +10,11 @@ x-runner-common: &runner-common
   env_file:
     - path: .env
       required: false
+  # The GitHub App PEM is mounted read-only from the host path set in
+  # GITHUB_APP_PRIVATE_KEY_HOST_PATH and appears inside the container at
+  # /run/secrets/github_app_key (matched by GITHUB_APP_PRIVATE_KEY_FILE).
+  volumes:
+    - ${GITHUB_APP_PRIVATE_KEY_HOST_PATH}:/run/secrets/github_app_key:ro
   # Runners reach the Docker daemon through socket-proxy (same Compose
   # project network) — they do not mount the host socket directly.
   # DOCKER_HOST is set per-service in each runner's environment block.
@@ -27,7 +32,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -49,7 +54,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -71,7 +76,7 @@ services:
       DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}

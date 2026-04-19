@@ -6,7 +6,7 @@ This repository provides ephemeral self-hosted GitHub Actions runners using a Gi
 
 - GitHub App authentication
 - Ephemeral runners
-- Shared Docker image cache via host Docker socket
+- Shared Docker image cache via socket-proxy sidecar
 - Docker Compose deployment
 - Easy extension by copying runner service blocks
 - Compatible with Coolify-style Docker Compose deployments
@@ -54,20 +54,21 @@ workflows target these runners — see the operational notes in `SETUP.md`.
 
 ### GitHub App private key
 
-The runner requires `GITHUB_APP_PRIVATE_KEY_FILE` — a path to the PEM file
-mounted into the container (e.g. via a Docker secret or bind-mount). Only the
-file path is stored in the container config; the key material is never exposed
-via `docker inspect`. Mount the PEM as a Docker secret or a read-only
-bind-mount and set `GITHUB_APP_PRIVATE_KEY_FILE` to its path inside the
-container.
+Set `GITHUB_APP_PRIVATE_KEY_HOST_PATH` to the absolute path of the PEM file
+on the Docker host. `docker-compose.yml` bind-mounts it read-only into every
+runner container at `/run/secrets/github_app_key`. `entrypoint.sh` copies it
+to a private tmpfs and deletes it before the runner starts accepting jobs —
+the key material is never stored in the container config and never appears in
+`docker inspect` output.
 
 ## Quick start
 
-1. Copy `.env.example` to `.env`
-2. Fill in GitHub App values
-3. Set `RUNNER_SCOPE=org` or `RUNNER_SCOPE=repo`
-4. Deploy with Docker Compose or through Coolify
-5. Target these runners in workflows using their labels
+1. Copy the GitHub App PEM to the host: `cp my-app.pem /etc/github-app/private-key.pem && chmod 600 /etc/github-app/private-key.pem`
+2. Copy `.env.example` to `.env`
+3. Fill in `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_HOST_PATH`, and `RUNNER_SCOPE`
+4. Set `RUNNER_SCOPE=org` (and `GITHUB_ORG`) or `RUNNER_SCOPE=repo` (and `GITHUB_REPO_OWNER`/`GITHUB_REPO_NAME`)
+5. Run `docker compose up -d`
+6. Target these runners in workflows using their labels
 
 ## Example workflow labels
 
