@@ -119,6 +119,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:
       - no-new-privileges:true
+    # Socket-proxy is the single mediator for all Docker API access from
+    # runner containers — dropping every capability limits the blast radius
+    # if the proxy process is ever compromised. haproxy (the proxy binary)
+    # listens on a high TCP port and does not need any Linux capabilities.
+    cap_drop:
+      - ALL
     environment:
       # Allowed: image pull/build operations only.
       # CONTAINERS is intentionally omitted: enabling it allows workflow jobs to
