@@ -1,0 +1,11 @@
+# DS-0002: "Last USER command in Dockerfile should not be 'root'"
+#
+# Intentional. The container entrypoint must run as root so that the host PEM
+# can be owned by UID 0 (mode 600) and therefore unreadable by the runner
+# user (UID 1001). entrypoint.sh reads the PEM, mints all GitHub App tokens
+# in root-process memory, and then drops privileges via gosu before exec'ing
+# config.sh and run.sh — workflow jobs never run as root.
+#
+# See: docs/SECURITY-REVIEW-2026-04-20.md finding H-1 ("Remediation (corrected —
+# verified feasible)").
+DS-0002

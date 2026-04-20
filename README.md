@@ -6,7 +6,7 @@ This repository provides ephemeral self-hosted GitHub Actions runners using a Gi
 
 - GitHub App authentication
 - Ephemeral runners
-- Shared Docker image cache via host Docker socket
+- Shared Docker image cache via socket-proxy sidecar
 - Docker Compose deployment
 - Easy extension by copying runner service blocks
 - Compatible with Coolify-style Docker Compose deployments
@@ -25,25 +25,61 @@ Each runner container:
 
 ## Shared image cache
 
-All runners mount:
-
-- `/var/run/docker.sock:/var/run/docker.sock`
-
-This means Docker pulls and image layers are shared through the host daemon.
-If your workflows repeatedly use the same container images for linters, scanners, or build tools, later jobs avoid re-pulling unchanged layers.
+All runners connect to Docker through the `socket-proxy` sidecar, which in turn
+mounts the host socket. Docker pulls and image layers are shared through the host
+daemon — if your workflows repeatedly use the same container images, later jobs
+avoid re-pulling unchanged layers.
 
 ## Requirements
 
 - Docker Engine 20.10+
 - Docker Compose v2.24+ (required for `env_file: required: false` support)
 
+## Security
+
+### Docker socket proxy
+
+Runners connect to the Docker daemon through a `socket-proxy` sidecar service
+(`tecnativa/docker-socket-proxy`). Runner containers do not hold the host
+socket directly — `DOCKER_HOST` is set to the proxy's TCP endpoint instead.
+This prevents workflow jobs from using the raw socket to inspect sibling
+runner containers or bind-mount the host filesystem.
+
+Note: the proxy allows `docker build` and `docker pull` but disables container
+creation and inspection (`CONTAINERS` is not enabled). This blocks `docker run`
+and prevents jobs from inspecting sibling runner containers. If jobs need
+`docker run`, add `CONTAINERS: 1` to the socket-proxy environment and note
+that this re-enables cross-runner container inspection. Ensure only trusted
+workflows target these runners — see the operational notes in `SETUP.md`.
+
+### GitHub App private key
+
+Set `GITHUB_APP_PRIVATE_KEY_HOST_PATH` to the absolute path of the PEM file
+on the Docker host. The host file must be owned by **root (UID 0)** with
+mode 600: `chown 0:0 <pem> && chmod 600 <pem>`.
+
+`docker-compose.yml` bind-mounts the PEM read-only into every runner
+container at `/run/secrets/github_app_key`. `entrypoint.sh` runs as root
+inside the container, reads the PEM to mint the initial JWT, pre-computes
+the runner remove token so cleanup does not need to re-sign a fresh JWT on
+shutdown, and then drops privileges via `gosu` before exec'ing `config.sh`
+and `run.sh`.
+
+The key material is never embedded in the container configuration and never
+appears in `docker inspect` output. Because the PEM file is owned by root
+(UID 0) and mode 600, the runner user (UID 1001) — and therefore any
+workflow job — **cannot read it**. Under default
+`kernel.yama.ptrace_scope=1` the runner user also cannot ptrace the root
+entrypoint process to extract tokens from its memory.
+
 ## Quick start
 
-1. Copy `.env.example` to `.env`
-2. Fill in GitHub App values
-3. Set `RUNNER_SCOPE=org` or `RUNNER_SCOPE=repo`
-4. Deploy with Docker Compose or through Coolify
-5. Target these runners in workflows using their labels
+1. Copy the GitHub App PEM to the host and set ownership to root: `cp my-app.pem /etc/github-app/private-key.pem && chown 0:0 /etc/github-app/private-key.pem && chmod 600 /etc/github-app/private-key.pem`
+2. Copy `.env.example` to `.env`
+3. Fill in `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `GITHUB_APP_PRIVATE_KEY_HOST_PATH`, and `RUNNER_SCOPE`
+4. Set `RUNNER_SCOPE=org` (and `GITHUB_ORG`) or `RUNNER_SCOPE=repo` (and `GITHUB_REPO_OWNER`/`GITHUB_REPO_NAME`)
+5. Run `docker compose up -d`
+6. Target these runners in workflows using their labels
 
 ## Example workflow labels
 

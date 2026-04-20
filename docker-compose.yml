@@ -10,36 +10,50 @@ x-runner-common: &runner-common
   env_file:
     - path: .env
       required: false
+  # The GitHub App PEM is mounted read-only from the host path set in
+  # GITHUB_APP_PRIVATE_KEY_HOST_PATH and appears inside the container at
+  # /run/secrets/github_app_key (matched by GITHUB_APP_PRIVATE_KEY_FILE).
   volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-  # group_add aligns the container's docker group GID with the host socket so
-  # that jobs can run docker commands.  Set DOCKER_GID to the GID of the host
-  # docker socket (stat -c '%g' /var/run/docker.sock).  When unset, falls back
-  # to the container's docker group; entrypoint.sh warns at startup if the
-  # socket is still inaccessible after group resolution.
-  group_add:
-    - "${DOCKER_GID:-docker}"
+    - ${GITHUB_APP_PRIVATE_KEY_HOST_PATH:?GITHUB_APP_PRIVATE_KEY_HOST_PATH must be set to the absolute host path of the GitHub App PEM file}:/run/secrets/github_app_key:ro
+  # Runners reach the Docker daemon through socket-proxy (same Compose
+  # project network) — they do not mount the host socket directly.
+  # DOCKER_HOST is set per-service in each runner's environment block.
   tmpfs:
     - /tmp:size=1g,exec
     - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
   security_opt:
     - no-new-privileges:true
+  # Drop all Linux capabilities and re-add only the minimum needed:
+  #   SETGID/SETUID   — gosu drop-privs from root entrypoint to runner user
+  #   CHOWN/FOWNER    — actions-runner extracts tarballs with various owners
+  #   DAC_OVERRIDE    — some upstream setup-* actions assume this is present
+  #   KILL            — runner manages child worker processes
+  # Everything else (NET_RAW, NET_BIND_SERVICE, SYS_CHROOT, MKNOD,
+  # AUDIT_WRITE, SETFCAP, SETPCAP, FSETID) is dropped for defense in depth.
+  cap_drop:
+    - ALL
+  cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    - KILL
+  # Resource limits prevent a single runaway workflow from DoS-ing the host
+  # and its sibling runners. Tune to host capacity.
+  mem_limit: ${RUNNER_MEM_LIMIT:-4g}
+  cpus: ${RUNNER_CPUS:-2}
+  pids_limit: ${RUNNER_PIDS_LIMIT:-1024}
 
 services:
   runner-1:
     <<: *runner-common
     hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-1
     environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      # Provide the private key via GITHUB_APP_PRIVATE_KEY_B64 (base64 env var,
-      # visible in `docker inspect`) OR via GITHUB_APP_PRIVATE_KEY_FILE (path to a
-      # mounted file — preferred; avoids storing the key in the container config).
-      # To use a mounted file: add a volume/secret mount and set
-      # GITHUB_APP_PRIVATE_KEY_FILE to the path inside the container, e.g.
-      # /run/secrets/github_app_key. Leave the other variable empty.
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -58,10 +72,10 @@ services:
     <<: *runner-common
     hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-2
     environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -80,10 +94,10 @@ services:
     <<: *runner-common
     hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-3
     environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -97,6 +111,33 @@ services:
       RUNNER_INSTANCE_NAME: ${RUNNER_3_NAME:-}
       RUNNER_DEFAULT_LABELS: ${RUNNER_DEFAULT_LABELS:-self-hosted,linux,x64,docker,ephemeral}
       RUNNER_EXTRA_LABELS: ${RUNNER_3_LABELS:-general}
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
+    # Socket-proxy is the single mediator for all Docker API access from
+    # runner containers — dropping every capability limits the blast radius
+    # if the proxy process is ever compromised. haproxy (the proxy binary)
+    # listens on a high TCP port and does not need any Linux capabilities.
+    cap_drop:
+      - ALL
+    environment:
+      # Allowed: image pull/build operations only.
+      # CONTAINERS is intentionally omitted: enabling it allows workflow jobs to
+      # call GET /containers/{id}/json on sibling runners and read their
+      # environment variables, and POST /containers/{id}/exec to run arbitrary
+      # commands inside a sibling runner container.
+      # If workflow jobs require `docker run`, add CONTAINERS: 1 and document
+      # the cross-runner inspection risk in your security model.
+      IMAGES: 1
+      BUILD: 1
+      POST: 1
+      INFO: 1
+      PING: 1
 
 # To add another runner, copy one of the runner-* services and change:
 # - service name

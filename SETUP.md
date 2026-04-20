@@ -38,21 +38,33 @@ Record these values:
 - **Installation ID**
 - **Private key PEM file**
 
-## 2. Prepare the private key for environment-variable use
+## 2. Prepare the private key
 
-Linux:
-
-```bash
-base64 -w0 my-github-app.private-key.pem
-```
-
-macOS:
+Copy the PEM file to a permanent location on the Docker host. The PEM must
+be owned by **root (UID 0)** with mode 600:
 
 ```bash
-base64 -i my-github-app.private-key.pem | tr -d '\n'
+cp my-github-app.private-key.pem /etc/github-app/private-key.pem
+chown 0:0 /etc/github-app/private-key.pem
+chmod 600 /etc/github-app/private-key.pem
 ```
 
-Copy the resulting single-line base64 value.
+`docker-compose.yml` bind-mounts `GITHUB_APP_PRIVATE_KEY_HOST_PATH` (the host
+path) into every runner container at `/run/secrets/github_app_key` (read-only).
+`entrypoint.sh` runs as root inside the container, reads the PEM to mint the
+initial JWT, pre-computes the runner remove token, and then drops privileges
+via `gosu` before exec'ing `config.sh` and `run.sh`. Workflow jobs execute
+as UID 1001 (`runner`) and therefore **cannot read** the PEM (owner root,
+mode 600) or ptrace the root entrypoint under default
+`kernel.yama.ptrace_scope=1`.
+
+The key is never embedded in container configuration and never appears in
+`docker inspect` output.
+
+> **Migration from a previous version:** if your host PEM is currently
+> `chown 1001:1001`, change it to `chown 0:0` before pulling the updated
+> image. The entrypoint validates ownership at startup and will fail fast
+> otherwise.
 
 ## 3. Prepare the repository
 
@@ -67,7 +79,7 @@ Fill at least these values:
 ```dotenv
 GITHUB_APP_ID=...
 GITHUB_APP_INSTALLATION_ID=...
-GITHUB_APP_PRIVATE_KEY_B64=...
+GITHUB_APP_PRIVATE_KEY_HOST_PATH=/etc/github-app/private-key.pem
 RUNNER_SCOPE=org
 GITHUB_ORG=your-org
 RUNNER_GROUP=Default
@@ -130,19 +142,29 @@ Minimum required values:
 
 - `GITHUB_APP_ID`
 - `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY_B64`
+- `GITHUB_APP_PRIVATE_KEY_HOST_PATH` — absolute path to the PEM file on the
+  Docker host (e.g. `/etc/github-app/private-key.pem`). Coolify must allow
+  the bind-mount for the runner services; configure this under the app's
+  volume settings if Coolify does not pick it up from the Compose file.
 - `RUNNER_SCOPE`
 - `GITHUB_ORG` or `GITHUB_REPO_OWNER` + `GITHUB_REPO_NAME`
 
 ### Host Docker socket
 
-This repository mounts:
+Runner containers do not mount the host socket directly. A `socket-proxy`
+sidecar service (`tecnativa/docker-socket-proxy`) mounts the socket and
+exposes a restricted TCP endpoint at `tcp://socket-proxy:2375`. Runners
+connect through this proxy via `DOCKER_HOST`.
 
-```yaml
-- /var/run/docker.sock:/var/run/docker.sock
-```
+The proxy is configured to allow image pulls and builds only. Container
+inspection and listing (`CONTAINERS`) are intentionally disabled to prevent
+workflow jobs from reading the environment variables of sibling runner
+containers. If your jobs require `docker run`, add `CONTAINERS: 1` to the
+`socket-proxy` environment and note that this re-enables cross-runner
+container inspection.
 
-Your Coolify Docker host must allow this mount. Without it, shared Docker image cache will not work, and container-based jobs that depend on host Docker will fail.
+Your Coolify Docker host must allow the socket mount for the `socket-proxy`
+service. Without it, Docker image caching and container-based jobs will fail.
 
 ## 7. Verify runner visibility in GitHub
 
@@ -202,10 +224,10 @@ Example additional service:
     <<: *runner-common
     hostname: ${RUNNER_CONTAINER_PREFIX:-gha-runner}-4
     environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
-      GITHUB_APP_PRIVATE_KEY_B64: ${GITHUB_APP_PRIVATE_KEY_B64:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
       GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
       GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
@@ -246,7 +268,8 @@ Check:
 - installation target
 - installation ID
 - app ID
-- private key base64 value
+- `GITHUB_APP_PRIVATE_KEY_HOST_PATH` set and file exists on the host
+- PEM mounted correctly (check `docker compose exec runner-1 ls -la /run/secrets/`)
 - org or repo names
 
 Then inspect logs:
@@ -261,20 +284,25 @@ Check that workflow `runs-on` labels exactly match the labels configured for at 
 
 ### Docker commands fail inside jobs
 
-Check that the Docker socket mount is present and that the host daemon is running.
-
-If the socket is present but jobs still get `permission denied`, the container's
-`docker` group GID does not match the host socket GID.  Fix:
+Check that the `socket-proxy` service is running:
 
 ```bash
-# Find the host socket GID
-stat -c '%g' /var/run/docker.sock
+docker compose ps socket-proxy
 ```
 
-Set that value as `DOCKER_GID` in your `.env` (or as a Coolify environment variable).
-The `group_add` entry in `docker-compose.yml` will add the runner process to that
-supplementary group at startup.  The entrypoint logs a warning with the correct GID
-if the socket is inaccessible at startup.
+It should show `running` state. If it is not running, check its logs:
+
+```bash
+docker compose logs socket-proxy
+```
+
+The most common cause is that `/var/run/docker.sock` is not accessible on the
+host or that the Coolify deployment does not permit the socket mount for the
+`socket-proxy` service. Confirm the socket exists on the host:
+
+```bash
+ls -la /var/run/docker.sock
+```
 
 ### Coolify deployment succeeds but runners are offline
 
