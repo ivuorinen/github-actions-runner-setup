@@ -185,10 +185,24 @@ cleanup() {
   exit "${exit_code}"
 }
 
+runner_pid=""
+
+_forward_to_runner() {
+  local sig="$1"
+  if [[ -n "${runner_pid}" ]]; then
+    log "Received SIG${sig}, forwarding to runner listener (PID ${runner_pid}) for graceful shutdown"
+    kill -"${sig}" "${runner_pid}" 2>/dev/null || true
+  fi
+}
+
 main() {
   trap cleanup EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  # Forward TERM/INT to the runner listener so it can finish the current job
+  # and deregister cleanly before the EXIT trap runs cleanup().  Without
+  # forwarding, the parent bash would exit immediately on signal and
+  # config.sh remove in cleanup() could race a still-running Runner.Listener.
+  trap '_forward_to_runner TERM' TERM
+  trap '_forward_to_runner INT' INT
 
   require_env GITHUB_APP_ID
   require_env GITHUB_APP_INSTALLATION_ID
@@ -309,11 +323,21 @@ main() {
     unset RUNNER_INSTANCE_NAME RUNNER_WORKDIR GITHUB_WEB_URL
   fi
 
-  # Run the listener as the runner user. The root bash process stays as
-  # parent so the EXIT trap can run deregister_runner with the pre-computed
-  # remove token.
+  # Run the listener as the runner user in the background so the parent
+  # bash can intercept SIGTERM/SIGINT (via _forward_to_runner) and pass
+  # them to the listener for a graceful shutdown before cleanup() runs
+  # deregister_runner.  The root bash process stays as parent so the
+  # EXIT trap can deregister with the pre-computed remove token.
   log 'Starting runner listener'
-  gosu runner ./run.sh
+  gosu runner ./run.sh &
+  runner_pid=$!
+
+  # A trap firing during 'wait' returns early with status 128+sig even
+  # though the child is still running, so loop until the child PID is
+  # actually gone.
+  while kill -0 "${runner_pid}" 2>/dev/null; do
+    wait "${runner_pid}" 2>/dev/null || true
+  done
 }
 
 main "$@"
