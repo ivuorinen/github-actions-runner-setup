@@ -243,7 +243,7 @@ main() {
 
   key_mode="$(stat -c '%a' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
   (((8#${key_mode}) & 077 == 0)) ||
-    fail "Key file permissions must not grant any access to group or other users: ${GITHUB_APP_PRIVATE_KEY_FILE}"
+    fail "Key file permissions must not grant any access to group or other users; got mode ${key_mode} on ${GITHUB_APP_PRIVATE_KEY_FILE}. On the Docker host run: chmod 600 \${GITHUB_APP_PRIVATE_KEY_HOST_PATH}"
 
   local jwt installation_token registration_token target_url runner_name
   jwt="$(make_jwt "${GITHUB_APP_ID}" "${GITHUB_APP_PRIVATE_KEY_FILE}")"
