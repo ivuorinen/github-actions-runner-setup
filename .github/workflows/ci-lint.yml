@@ -44,3 +44,30 @@ jobs:
 
       - name: Run pre-commit
         run: pre-commit run --all-files
+
+      - name: Verify entrypoint arithmetic precedence
+        # Regression guard for the bash arithmetic operator-precedence bug
+        # (see .claude/rules/09-arithmetic-precedence-bash.md). Shared
+        # source of truth with the pre-commit local hook.
+        # No untrusted github.event.* references in this step.
+        run: scripts/pre-commit-hooks/check-arithmetic-precedence.sh scripts/entrypoint.sh scripts/healthcheck.sh .claude/hooks/*.sh scripts/pre-commit-hooks/*.sh
+
+      - name: Verify no socket mount in runner services
+        # Regression guard for .claude/rules/04-docker-socket-never-in-runner.md.
+        # Calls the same script the pre-commit local hook uses, so a single
+        # source of truth detects the violation client-side and in CI.
+        # No untrusted github.event.* references in this step.
+        run: scripts/pre-commit-hooks/check-no-docker-sock-in-runner.sh docker-compose.yml
+
+      - name: Verify all hooks are executable
+        # Catches missing chmod +x on .claude/hooks/*.sh, which silently
+        # disables the hook in PreToolUse.
+        run: |
+          set -Eeuo pipefail
+          non_exec=$(find .claude/hooks -name '*.sh' -not -perm -u+x -print)
+          if [[ -n "${non_exec}" ]]; then
+            echo "FAIL: hook scripts missing execute bit:"
+            echo "${non_exec}"
+            exit 1
+          fi
+          echo "PASS: all .claude/hooks/*.sh are executable"

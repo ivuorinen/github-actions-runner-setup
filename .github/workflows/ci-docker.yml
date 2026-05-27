@@ -22,10 +22,17 @@ jobs:
     permissions:
       contents: read
       actions: write
+      security-events: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Lint Dockerfile (hadolint)
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -35,6 +42,62 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: ivuorinen/github-app-actions-runner:test
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
+        with:
+          image-ref: ivuorinen/github-app-actions-runner:test
+          format: sarif
+          output: trivy-results.sarif
+          # Build artifacts often have HIGH CVEs against transitive
+          # dependencies that are out of our control until the base image
+          # rebases. Don't fail PRs on those, but do upload them to the
+          # Security tab so they're visible.
+          exit-code: '0'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@8b1fcfbb4ddd91d4ee93d4716e72b96d5cd4be15 # v3.30.10
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-image-scan
+
+      - name: Smoke test — entrypoint refuses bad PEM mode
+        # No untrusted github.event.* values are used in this step; the
+        # entire body is repository-controlled. The PEM is a throwaway
+        # generated inside the step and never reaches GitHub.
+        env:
+          IMAGE_TAG: ivuorinen/github-app-actions-runner:test
+        run: |
+          set -Eeuo pipefail
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf "$tmpdir"' EXIT
+          openssl genrsa -out "$tmpdir/key.pem" 2048 >/dev/null 2>&1
+          chmod 644 "$tmpdir/key.pem"
+          set +e
+          docker run --rm \
+            -v "$tmpdir/key.pem:/run/secrets/github_app_key:ro" \
+            -e GITHUB_APP_ID=1 \
+            -e GITHUB_APP_INSTALLATION_ID=1 \
+            -e GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/github_app_key \
+            -e RUNNER_SCOPE=org \
+            -e GITHUB_ORG=test \
+            -e RUNNER_WORKDIR=/home/runner/_work \
+            "$IMAGE_TAG" 2>&1 | tee out.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            echo "FAIL: entrypoint exited 0 with bad PEM permissions"
+            exit 1
+          fi
+          if ! grep -qE "Key file (must be owned|permissions must not)" out.log; then
+            echo "FAIL: entrypoint did not produce the expected permission error"
+            exit 1
+          fi
+          echo "PASS: entrypoint correctly rejected mode 644 PEM"
