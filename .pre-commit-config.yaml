@@ -53,3 +53,27 @@ repos:
       - id: checkov
         args:
           - "--quiet"
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.14.0
+    hooks:
+      - id: hadolint-docker
+        args:
+          - "--failure-threshold"
+          - "warning"
+
+  # Local hooks for invariants that no upstream catches. The actual
+  # logic lives in scripts/pre-commit-hooks/ so that the YAML stays
+  # readable and each hook can be invoked stand-alone for debugging.
+  - repo: local
+    hooks:
+      - id: arithmetic-precedence-trap
+        name: bash arithmetic precedence trap
+        entry: scripts/pre-commit-hooks/check-arithmetic-precedence.sh
+        language: script
+        files: \.sh$
+      - id: no-docker-sock-in-runner
+        name: docker.sock only in socket-proxy
+        entry: scripts/pre-commit-hooks/check-no-docker-sock-in-runner.sh
+        language: script
+        files: (docker-compose|compose)\.ya?ml$

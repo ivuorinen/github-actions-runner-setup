@@ -1,11 +1,40 @@
+# Exclude every file that does not need to be in the build context.
+# Smaller context = faster build + fewer chances of leaking host state.
 .git
 .gitignore
+.gitattributes
+.github/
+.claude/
+.editorconfig
+.pre-commit-config.yaml
+.shellcheckrc
+.yamllint.yml
+.yamlignore
+.markdownlint.json
+.mega-linter.yml
+.trivyignore
+
+# Secrets that absolutely must never be baked into the image
 .env
 .env.*
+*.pem
+*.key
 secrets/
+
+# Documentation — image consumers don't need this
+docs/
+*.md
+LICENSE.md
+Makefile
+TODO.md
+
+# Build artefacts and editor cruft
 *.log
 *.tmp
 *.swp
+*.swo
+.DS_Store
 node_modules/
 dist/
 build/
+coverage/

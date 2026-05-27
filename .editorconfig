@@ -13,9 +13,13 @@ trim_trailing_whitespace = true
 [{*.md}]
 indent_size = 2
 tab_width = 2
-max_line_length = 160
+max_line_length = 200
 trim_trailing_whitespace = false
 
-[{*.mk,GNUmakefile,makefile}]
+[{*.mk,GNUmakefile,Makefile,makefile}]
 tab_width = 4
 indent_style = tab
+indent_size = 4
+
+[{*.yml,*.yaml}]
+max_line_length = 200

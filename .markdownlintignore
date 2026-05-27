@@ -1,0 +1,10 @@
+# Audit findings use the nitpicker skill's prescribed format which has
+# long Problem/Evidence/Impact/Fix lines that intentionally exceed our
+# 200-char line-length cap. Skip those files for markdownlint.
+docs/audit/
+
+# Vendored copies of skill outputs.
+docs/superpowers/
+
+# Generated content.
+docs/SECURITY-REVIEW-*.md

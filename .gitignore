@@ -1,12 +1,42 @@
+# Runtime env files — never commit
 .env
 .env.local
 .env.production
 .env.*
+# Tracked example. The negation must come AFTER the broader patterns above.
+!.env.example
+
+# Sensitive material — never commit
 secrets/
 *.pem
 *.key
+
+# Build / runtime artefacts
 *.log
 *.tmp
 *.pid
+
+# Local-only Claude state and skill caches
 docs/superpowers/
 .claude/settings.local.json
+.claude/.cache/
+
+# This repository's `.claude/` is intentional project state (rules, hooks,
+# project-scoped settings) that MUST be tracked. The user's global git
+# config may exclude `**/.claude/*` by default; the negations below
+# re-include the parts we track.
+!.claude/
+!.claude/**
+.claude/settings.local.json
+.claude/.cache/
+
+# Same story for the audit findings — tracked artefact, not session noise.
+!docs/audit/
+!docs/audit/**
+
+# Editor and OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
