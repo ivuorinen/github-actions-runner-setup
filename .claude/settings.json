@@ -6,11 +6,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/block-env-edit.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-env-edit.sh"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/block-secret-patterns.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-secret-patterns.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-runner-socket-mount.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-unpinned-base-image.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-shell-strict-mode-removal.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-token-logging.sh"
           }
         ]
       },
@@ -19,7 +35,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/block-force-push-main.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-force-push-main.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-cat-secrets.sh"
           }
         ]
       }
@@ -30,15 +50,23 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/post-edit-lint.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-edit-lint.sh"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/validate-compose-on-edit.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/validate-compose-on-edit.sh"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/warn-entrypoint-token-handling.sh"
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/validate-dockerfile-on-edit.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/validate-entrypoint-arithmetic.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/warn-entrypoint-token-handling.sh"
           }
         ]
       }
