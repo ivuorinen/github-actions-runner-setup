@@ -7,6 +7,12 @@ x-runner-common: &runner-common
     dockerfile: Dockerfile
   image: ${RUNNER_IMAGE_NAME:-local/github-app-actions-runner:latest}
   restart: unless-stopped
+  # Wait for socket-proxy to be healthy before starting the runner. Without
+  # this, the first workflow that calls `docker pull` would fail until the
+  # proxy listener is ready. service_healthy uses the proxy's healthcheck.
+  depends_on:
+    socket-proxy:
+      condition: service_healthy
   env_file:
     - path: .env
       required: false
@@ -44,6 +50,20 @@ x-runner-common: &runner-common
   mem_limit: ${RUNNER_MEM_LIMIT:-4g}
   cpus: ${RUNNER_CPUS:-2}
   pids_limit: ${RUNNER_PIDS_LIMIT:-1024}
+  ulimits:
+    nofile:
+      soft: ${RUNNER_NOFILE_SOFT:-4096}
+      hard: ${RUNNER_NOFILE_HARD:-8192}
+  # Stop signal and longer grace period so the runner has time to finish the
+  # current job and deregister via the EXIT trap before the container is
+  # killed. Default 10s is not enough for a long-running job to checkpoint.
+  stop_signal: SIGTERM
+  stop_grace_period: ${RUNNER_STOP_GRACE:-2m}
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
 
 services:
   runner-1:
@@ -115,6 +135,13 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy:0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     restart: unless-stopped
+    # Read-only root filesystem with explicit tmpfs for haproxy's runtime
+    # state (sockets, pid file). Defense-in-depth: if a workflow ever
+    # finds a way to write through the proxy, it cannot persist a payload.
+    read_only: true
+    tmpfs:
+      - /run:size=8m,mode=0755
+      - /tmp:size=8m,mode=1777
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt:
@@ -125,6 +152,26 @@ services:
     # listens on a high TCP port and does not need any Linux capabilities.
     cap_drop:
       - ALL
+    # Bound resources so a misbehaving job spamming the proxy cannot DoS
+    # other runners by exhausting the proxy.
+    mem_limit: ${PROXY_MEM_LIMIT:-128m}
+    pids_limit: ${PROXY_PIDS_LIMIT:-64}
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    # Confirm the proxy's TCP listener on 2375 is accepting connections.
+    # tecnativa/docker-socket-proxy is based on Alpine and ships busybox nc.
+    # -z makes nc connect-only (no data), which is enough to verify haproxy
+    # has bound the socket — the proxy starts accepting before its upstream
+    # docker.sock is reachable, so this is a true readiness probe.
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "2375"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     environment:
       # Allowed: image pull/build operations only.
       # CONTAINERS is intentionally omitted: enabling it allows workflow jobs to
@@ -138,6 +185,9 @@ services:
       POST: 1
       INFO: 1
       PING: 1
+      # Keep the haproxy log level low — every Docker API call from a runner
+      # job would otherwise print a line, flooding container logs.
+      LOG_LEVEL: warning
 
 # To add another runner, copy one of the runner-* services and change:
 # - service name
