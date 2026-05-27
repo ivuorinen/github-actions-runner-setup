@@ -47,16 +47,39 @@ api() {
   local response_file http_code response message
 
   response_file="$(mktemp)"
+  # Ensure the tempfile is removed even if a signal interrupts api() between
+  # mktemp and the explicit rm below. The file is mode 600 on tmpfs but
+  # cleaning up proactively keeps /tmp tidy and removes any short-lived
+  # token-bearing response body. RETURN trap fires when this function exits.
+  # shellcheck disable=SC2064 # intentionally expand response_file now
+  trap "rm -f '${response_file}'" RETURN
 
   # Build curl args; -o captures body to file, -w prints HTTP code to stdout.
   # Omitting -f so we can surface GitHub's error .message on 4xx/5xx.
+  #
+  # Timeouts:
+  #   --connect-timeout 10  — give TLS handshake a chance over slow links
+  #   --max-time 60         — per-attempt cap (not total); 3 retries × 60s
+  #                           gives a 3-minute worst case for token endpoints
+  #
+  # Retries:
+  #   --retry 3              — 3 retries on top of the first attempt
+  #   --retry-all-errors     — also retry on 4xx (incl. 429) and HTTP errors
+  #   --retry-delay 0        — let curl use exponential backoff (1s, 2s, 4s, …)
+  #     (default; explicit for clarity)
+  #
+  # API version 2022-11-28 is the long-term GA version; 2026-03-10 is the
+  # newer default in the docs but offers nothing we need. Keep 2022-11-28
+  # until a feature requires the newer version.
   local -a curl_args=(
-    -sSL --connect-timeout 10 --max-time 30
+    -sS --location
+    --connect-timeout 10 --max-time 60
     --retry 3 --retry-all-errors
     -X "${method}"
     -H 'Accept: application/vnd.github+json'
     -H "Authorization: Bearer ${token}"
     -H 'X-GitHub-Api-Version: 2022-11-28'
+    -H "User-Agent: ivuorinen/github-actions-runner-setup"
     -o "${response_file}"
     -w '%{http_code}'
   )
@@ -66,12 +89,11 @@ api() {
   fi
 
   http_code="$(curl "${curl_args[@]}" "${url}")" || {
-    rm -f "${response_file}"
     fail "Network error calling ${method} ${url}"
   }
 
   response="$(cat "${response_file}")"
-  rm -f "${response_file}"
+  # response_file removed by the RETURN trap above
 
   if [[ ! "${http_code}" =~ ^2[0-9][0-9]$ ]]; then
     message="$(printf '%s' "${response}" | jq -r '.message // ""' 2>/dev/null || true)"
@@ -87,11 +109,20 @@ extract_token() {
   # Use '// empty' so jq converts null → "", and suppress parse errors with
   # || true so that a non-JSON/empty response falls through to the fail below
   # instead of aborting with an opaque jq error under set -Eeuo pipefail.
+  # Note: jq's `// empty` does NOT trigger for the empty string "" (only for
+  # null/absent), so we additionally test [[ -z ]] below to reject an empty
+  # token value that GitHub *technically* could return.
   token="$(printf '%s' "${response}" | jq -r '.token // empty' 2>/dev/null || true)"
   if [[ -z "${token}" ]]; then
     local message
     message="$(printf '%s' "${response}" | jq -r '.message // empty' 2>/dev/null || true)"
     fail "API returned no token${message:+: ${message}}"
+  fi
+  # Defense in depth: the token must look like a GitHub App installation /
+  # registration token. They are all ≥40 chars, alphanumeric with underscores
+  # and dashes. A 1-char "token" indicates we parsed the wrong field.
+  if [[ "${#token}" -lt 10 ]]; then
+    fail "API returned a suspiciously short token (length ${#token}); refusing to use it"
   fi
   printf '%s' "${token}"
 }
@@ -186,12 +217,21 @@ cleanup() {
 }
 
 runner_pid=""
+# Holds the most recent signal name received before runner_pid was set, so a
+# SIGTERM arriving during the tiny window between `./run.sh &` and the
+# `runner_pid=$!` assignment is not lost. main() consults this flag right
+# after capturing the PID and forwards any pending signal immediately.
+pending_signal=""
 
 _forward_to_runner() {
   local sig="$1"
   if [[ -n "${runner_pid}" ]]; then
     log "Received SIG${sig}, forwarding to runner listener (PID ${runner_pid}) for graceful shutdown"
     kill -"${sig}" "${runner_pid}" 2>/dev/null || true
+  else
+    # PID not set yet — remember and replay once main() assigns runner_pid.
+    pending_signal="${sig}"
+    log "Received SIG${sig} before runner listener was started; queued for replay"
   fi
 }
 
@@ -211,10 +251,19 @@ main() {
   require_env RUNNER_WORKDIR
 
   # Default to the public GitHub endpoints when explicit values are not
-  # provided (for example, when running outside docker-compose). GitHub
-  # Enterprise Server users must override both variables for their instance.
-  : "${GITHUB_API_URL:=https://api.github.com}"
-  : "${GITHUB_WEB_URL:=https://github.com}"
+  # provided (for example, when running outside docker-compose). For GHES,
+  # operators can either:
+  #   1. set GITHUB_API_URL and GITHUB_WEB_URL directly (most explicit), OR
+  #   2. set only GITHUB_HOST=ghes.example.com and let entrypoint derive
+  #      the API URL (https://<host>/api/v3) and web URL (https://<host>).
+  # Explicit values take precedence over GITHUB_HOST-derived ones.
+  if [[ -n "${GITHUB_HOST:-}" && "${GITHUB_HOST}" != "github.com" ]]; then
+    : "${GITHUB_API_URL:=https://${GITHUB_HOST}/api/v3}"
+    : "${GITHUB_WEB_URL:=https://${GITHUB_HOST}}"
+  else
+    : "${GITHUB_API_URL:=https://api.github.com}"
+    : "${GITHUB_WEB_URL:=https://github.com}"
+  fi
 
   # Build the runner label set from default and per-runner extra labels,
   # assembling here rather than in docker-compose.yml so that an empty
@@ -256,7 +305,12 @@ main() {
     fail "Key file must be owned by UID 0 (root) inside the container so the runner user cannot read it; got UID ${key_owner}. On the Docker host run: chown 0:0 ${GITHUB_APP_PRIVATE_KEY_FILE}"
 
   key_mode="$(stat -c '%a' "${GITHUB_APP_PRIVATE_KEY_FILE}")"
-  (((8#${key_mode}) & 077 == 0)) ||
+  # NOTE: parentheses around `((8#${key_mode}) & 077)` are load-bearing.
+  # Bash arithmetic gives `==` higher precedence than `&`, so the natural-
+  # looking expression `(8#mode) & 077 == 0` parses as `key & (077 == 0)` =
+  # `key & 0` = `0`, which would make the check always fail. Keep the inner
+  # parens. See .claude/rules/09-arithmetic-precedence-bash.md
+  ((((8#${key_mode}) & 077) == 0)) ||
     fail "Key file permissions must not grant any access to group or other users; got mode ${key_mode} on ${GITHUB_APP_PRIVATE_KEY_FILE}. On the Docker host run: chmod 600 \${GITHUB_APP_PRIVATE_KEY_HOST_PATH}"
 
   local jwt installation_token registration_token target_url runner_name
@@ -331,6 +385,16 @@ main() {
   log 'Starting runner listener'
   gosu runner ./run.sh &
   runner_pid=$!
+
+  # If a SIGTERM/SIGINT arrived during the background-launch window before
+  # runner_pid was assigned, _forward_to_runner queued it. Replay it now so
+  # the listener gets a chance to drain instead of being SIGKILL'd at the
+  # end of stop_grace_period.
+  if [[ -n "${pending_signal}" ]]; then
+    log "Replaying queued SIG${pending_signal} to runner listener (PID ${runner_pid})"
+    kill -"${pending_signal}" "${runner_pid}" 2>/dev/null || true
+    pending_signal=""
+  fi
 
   # A trap firing during 'wait' returns early with status 128+sig even
   # though the child is still running, so loop until the child PID is
