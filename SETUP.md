@@ -250,7 +250,33 @@ RUNNER_4_LABELS=lint,large
 RUNNER_4_NAME=
 ```
 
-## 10. Operational notes
+## 10. GitHub Enterprise Server (GHES)
+
+If you target a GHES instance instead of GitHub Cloud, set `GITHUB_HOST`
+to your instance hostname in `.env`:
+
+```dotenv
+GITHUB_HOST=ghes.example.com
+```
+
+`entrypoint.sh` derives the API and web URLs automatically:
+
+- `GITHUB_API_URL=https://ghes.example.com/api/v3`
+- `GITHUB_WEB_URL=https://ghes.example.com`
+
+If your GHES setup uses a separate API subdomain (rare but supported),
+override either URL explicitly in `.env` and that value wins:
+
+```dotenv
+GITHUB_HOST=ghes.example.com
+GITHUB_API_URL=https://api.ghes.example.com
+GITHUB_WEB_URL=https://ghes.example.com
+```
+
+GitHub App creation, permissions, and installation work the same way on
+GHES as on cloud — the App lives inside your GHES tenant.
+
+## 11. Operational notes
 
 - These runners are **ephemeral** by design.
 - Job workspace should not be persisted across runs.
@@ -258,7 +284,7 @@ RUNNER_4_NAME=
 - Any workflow that can reach the Docker socket has effectively elevated control over the runner host, so only trusted workflows should target these runners.
 - For pull requests from untrusted forks, use separate restricted runners or GitHub-hosted runners.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### Runner does not show up
 

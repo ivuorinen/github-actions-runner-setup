@@ -8,37 +8,39 @@ Ephemeral GitHub Actions self-hosted runner system using GitHub App authenticati
 deployed via Docker Compose. Designed for Coolify but works standalone.
 Each runner registers, executes one job, exits, and Docker restarts it fresh.
 
+For full architecture see `docs/ARCHITECTURE.md`. For operations see `docs/OPERATIONS.md`.
+
 ## Architecture
 
 **Auth flow:** GitHub App JWT (9-min expiry) → Installation Token → Registration Token → Ephemeral Runner → Auto-deregister on exit.
 
 - `scripts/entrypoint.sh` — Orchestrates the entire lifecycle: JWT creation, token exchange, runner config, cleanup trap for deregistration
 - `scripts/healthcheck.sh` — Simple process check for Docker HEALTHCHECK
+- `scripts/pre-commit-hooks/` — Local pre-commit hook scripts (arithmetic-precedence check, no-docker-sock-in-runner check)
 - `Dockerfile` — Extends `ghcr.io/actions/actions-runner`, adds curl/jq/openssl/git/docker/tini
 - `docker-compose.yml` — 3 runner services using YAML anchor (`&runner-common`); per-service `environment:` blocks (YAML merge doesn't deep-merge, so the anchor's environment is intentionally omitted)
-- `.env.example` — Full configuration reference with all supported variables
+- `.env.example` — Full configuration reference with all supported variables (canonical reference in `docs/ENVIRONMENT-VARIABLES.md`)
+- `.claude/rules/` — Invariants that must hold; read before modifying entrypoint, Dockerfile, or compose
+- `.claude/hooks/` — PreToolUse/PostToolUse hooks enforcing those invariants client-side
 
 **Key design decisions:**
 
-- YAML merge (`<<: *anchor`) doesn't deep-merge `environment:` keys — each service must declare its own complete environment block
-- `env_file` uses `required: false` (Compose v2.24+) for Coolify compatibility where env vars are injected directly
-- Runner deregistration happens in a subshell inside the cleanup trap so `fail()` calls don't abort PEM cleanup
+- YAML merge (`<<: *anchor`) doesn't deep-merge `environment:` keys — each service must declare its own complete environment block. See `.claude/rules/05-yaml-anchor-no-env-merge.md`.
+- `env_file` uses `required: false` (Compose v2.24+) for Coolify compatibility where env vars are injected directly.
+- Runner deregistration happens in a subshell inside the cleanup trap so `fail()` calls don't abort PEM cleanup. See `.claude/rules/07-cleanup-trap-isolation.md`.
+- Bash arithmetic with bitwise + comparison must be parenthesised: `((a & b) == c)` not `((a & b == c))`. See `.claude/rules/09-arithmetic-precedence-bash.md`.
 
 ## Linting and Validation
 
 ```bash
-# Shell scripts
-shellcheck scripts/entrypoint.sh
-shfmt -d scripts/entrypoint.sh
-
-# YAML
-yamllint docker-compose.yml
-
-# All pre-commit hooks at once
-pre-commit run --all-files
+make lint                  # pre-commit run --all-files (recommended)
+make lint-shell            # shellcheck + shfmt on scripts/ and .claude/hooks/
+make lint-yaml             # yamllint on compose + CI workflows
+make lint-docker           # hadolint via the pinned container
+make lint-compose          # docker compose config --quiet
 ```
 
-Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint, checkov, detect-private-key.
+Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint, checkov, hadolint, detect-private-key, and two local guards (arithmetic precedence trap, docker.sock-not-in-runner).
 
 ## Code Style
 
@@ -47,3 +49,14 @@ Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint,
 - Max 200 chars for YAML/Markdown; 160 chars general
 - Shell scripts: `set -Eeuo pipefail`, functions use `local` for all variables
 - ShellCheck directive SC2129 is disabled (`.shellcheckrc`)
+
+## Where to read next
+
+- `docs/ARCHITECTURE.md` — system design, container lifecycle, token chain, privilege boundary
+- `docs/OPERATIONS.md` — day-2 ops, scaling, credential rotation
+- `docs/TROUBLESHOOTING.md` — common failures and fixes
+- `docs/ENVIRONMENT-VARIABLES.md` — every env var read by the system
+- `docs/SECURITY.md` — threat model and defensive choices
+- `docs/SECURITY-REVIEW-2026-04-20.md` — formal security review findings
+- `docs/audit/nitpicker-findings.md` — adversarial audit findings
+- `.claude/rules/` — encoded invariants (read top to bottom before touching shell/compose/dockerfile)
