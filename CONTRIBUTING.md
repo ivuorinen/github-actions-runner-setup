@@ -32,9 +32,15 @@ suite covers shell, YAML, and Markdown without running the entrypoint.
 ### Style
 
 - Shell: 2-space indent, `set -Eeuo pipefail`, `local` for all function
-  variables, prefer `printf` over `echo`, no `cd` in the entrypoint
-  (rule 10).
+  variables, prefer `printf` over `echo`, no `cd` in `entrypoint.sh`
+  (rule 10 — `.claude/rules/10-no-cd-in-entrypoint.md`; the cleanup trap
+  invokes `./config.sh` by relative path).
 - YAML: 2-space indent, max 200 chars, `---` document marker on top.
+  Socket-proxy environment must stay within rule 11's allow-set
+  (IMAGES, BUILD, POST, INFO, PING). Runner services may only re-add
+  caps from rule 12's allow-set (CHOWN, DAC_OVERRIDE, FOWNER, SETGID,
+  SETUID, KILL). Both rules permit explicit per-line annotation
+  overrides — see `.claude/rules/11-…` and `.claude/rules/12-…`.
 - Markdown: 2-space indent, max 200 chars, ATX headers, fenced code
   blocks with language.
 - Dockerfile: digest-pin every `FROM` (rule 06), comment intent for any

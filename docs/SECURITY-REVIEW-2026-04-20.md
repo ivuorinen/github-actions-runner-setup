@@ -547,25 +547,31 @@ needs several writable paths.
 
 ---
 
-### L-5 — shellcheck pre-commit severity = warning
+### L-5 — shellcheck pre-commit severity = warning **[FIXED]**
 
-**Status:** Configuration.
-**Severity:** Low
-**Location:** `.pre-commit-config.yaml:33-36`.
+**Status:** Resolved post-review. The current `.pre-commit-config.yaml`
+runs shellcheck with `--severity=style`, the stricter setting this
+review recommended. The original text below is preserved for context.
 
-```yaml
-- id: shellcheck
-  args: ["--severity=warning"]
-```
+> **Severity:** Low
+> **Location:** `.pre-commit-config.yaml:33-36` (at review time).
+>
+> ```yaml
+> - id: shellcheck
+>   args: ["--severity=warning"]
+> ```
+>
+> Shellcheck's `--severity=warning` hides `style` and `info` findings.
+> Several style-level checks (e.g., SC2250: "Prefer putting braces around
+> variable references") improve long-term maintainability and, by making
+> expansions explicit, reduce the chance of introducing quoting bugs.
+>
+> **Remediation:** lower to `--severity=style` or drop the flag entirely.
+> Re-running shellcheck on the current tree at `style` level produces
+> zero findings (verified during this review).
 
-Shellcheck's `--severity=warning` hides `style` and `info` findings.
-Several style-level checks (e.g., SC2250: "Prefer putting braces around
-variable references") improve long-term maintainability and, by making
-expansions explicit, reduce the chance of introducing quoting bugs.
-
-**Remediation:** lower to `--severity=style` or drop the flag entirely.
-Re-running shellcheck on the current tree at `style` level produces
-zero findings (verified during this review).
+The remediation landed; pre-commit invokes shellcheck at `--severity=style`
+and the tree remains clean at that level.
 
 ---
 

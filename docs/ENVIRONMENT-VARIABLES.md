@@ -208,6 +208,16 @@ Legend:
 - **Optional.** Default: `4g`. Per-runner memory limit (Docker
   `mem_limit`). Container is OOM-killed (exit 137) if exceeded.
 - Where read: `docker-compose.yml`.
+- **Memory accounting note.** Each runner has two `tmpfs` mounts:
+  `/tmp` (size `1g`, exec-allowed for compiled-binary workflows) and
+  `/runner-tmp` (size `128m`, no-exec). Linux counts tmpfs page usage
+  against the container's `mem_limit` cgroup, so the effective
+  workload-available memory is approximately `RUNNER_MEM_LIMIT
+  - actual_tmpfs_usage`. With defaults that ceiling is around 3 GiB
+  before OOM. If your workflows put large artefacts under`/tmp`,
+  raise`RUNNER_MEM_LIMIT`or place them under the work directory
+  (`/home/runner/_work`, on the container's main filesystem, not
+  tmpfs).
 
 ### `RUNNER_CPUS`
 

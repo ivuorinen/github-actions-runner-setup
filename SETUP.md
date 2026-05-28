@@ -276,7 +276,27 @@ GITHUB_WEB_URL=https://ghes.example.com
 GitHub App creation, permissions, and installation work the same way on
 GHES as on cloud — the App lives inside your GHES tenant.
 
-## 11. Operational notes
+## 11. Local development on macOS (Docker Desktop)
+
+This project targets a **Linux Docker host** for production. Local
+testing on macOS via Docker Desktop works but has two quirks worth
+calling out:
+
+- **Bind-mount UID translation.** Docker Desktop's VM remaps mounted
+  host files to UID `0:0` inside the VM regardless of the host UID.
+  This is convenient for the PEM (the entrypoint's
+  `chown 0:0 /etc/github-app/private-key.pem` is already true inside
+  the Docker VM), but masks the host-permission mistakes the
+  production check is designed to catch. **Test PEM mode/owner
+  enforcement on a real Linux host before deploying.**
+- **`/var/run/docker.sock`** under Docker Desktop is a symlink to the
+  user-owned socket inside the VM. The `socket-proxy` reads it
+  transparently, but the host-side `ls -la /var/run/docker.sock` may
+  show a symlink rather than a socket file. That is normal on macOS.
+
+For Linux hosts (the production target), neither concern applies.
+
+## 12. Operational notes
 
 - These runners are **ephemeral** by design.
 - Job workspace should not be persisted across runs.
@@ -284,7 +304,7 @@ GHES as on cloud — the App lives inside your GHES tenant.
 - Any workflow that can reach the Docker socket has effectively elevated control over the runner host, so only trusted workflows should target these runners.
 - For pull requests from untrusted forks, use separate restricted runners or GitHub-hosted runners.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Runner does not show up
 

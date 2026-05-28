@@ -90,7 +90,18 @@ findings and remediations, see `docs/SECURITY-REVIEW-2026-04-20.md`.
 12. **Renovate keeps base images digest-pinned and current.**
 
 13. **`.claude/hooks/*` block edits that would silently weaken the
-    above.** See `.claude/rules/`.
+    above.** See `.claude/rules/`. Specifically:
+    - Rule 11 (`block-socket-proxy-widening.sh`) refuses
+      `CONTAINERS=1` / `EXEC=1` / etc. on the socket-proxy without an
+      explicit per-line allow annotation, preventing accidental
+      re-enable of the cross-runner inspection surface.
+    - Rule 12 (`block-runner-cap-widening.sh`) refuses adding caps
+      beyond the documented minimum (CHOWN, DAC_OVERRIDE, FOWNER,
+      SETGID, SETUID, KILL) — blocks SYS_PTRACE / SYS_ADMIN / NET_RAW
+      / etc. from being slipped in.
+    - Rule 13 (`block-dockerfile-broad-copy.sh`) refuses
+      `COPY . .` / `ADD . …` / `ADD https://…` — a single
+      `.dockerignore` mistake cannot ship secrets to image layers.
 
 ## What is explicitly NOT defended
 

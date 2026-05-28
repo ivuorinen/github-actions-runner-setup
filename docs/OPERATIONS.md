@@ -255,6 +255,53 @@ dig +short A api.github.com   # should return 140.82.112.x or similar
 If you operate on an IPv6-only network, either configure a NAT64/DNS64
 gateway or run a small IPv4 jump host that the runner traffic transits.
 
+## OIDC tokens for cloud authentication (AWS / GCP / Azure)
+
+These runners support GitHub Actions' OIDC token feature transparently:
+it is a GitHub Actions feature, not a runner-side feature, so no
+configuration is required on our side. Workflows can request a JWT from
+GitHub's OIDC provider and exchange it for short-lived cloud credentials
+via that cloud's identity federation (AWS STS AssumeRoleWithWebIdentity,
+GCP Workload Identity Federation, Azure AD federated credentials).
+
+The runner-side requirement is just:
+
+- `permissions: id-token: write` in the workflow or job.
+- A trust-relationship configured on the cloud side that accepts the
+  OIDC subject your runner produces (typically scoped to repo/branch/env).
+
+Example AWS:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, docker, ephemeral, lint, small]
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/MyDeployRole
+          aws-region: eu-west-1
+      - run: aws sts get-caller-identity
+```
+
+The OIDC JWT is minted by `api.github.com`, fetched by the runner over
+HTTPS during the action's execution, and exchanged with AWS STS. Nothing
+about this flow requires the GitHub App PEM, the registration token, or
+any other long-lived credential — so it is the strongly preferred way to
+authenticate to clouds from these runners.
+
+If your cloud provider is behind an HTTP proxy that the workflows must
+traverse, that proxy configuration (above) is honoured automatically.
+
+GHES note: GHES instances expose their own OIDC provider at
+`https://<host>/_services/token`; the workflow side is otherwise
+identical. Confirm your cloud's identity federation accepts the GHES
+issuer URL.
+
 ## See also
 
 - `TROUBLESHOOTING.md` — what to do when things break

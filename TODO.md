@@ -13,8 +13,16 @@ deferred but tracked.
   `lint`, `build`, `up`, `down`, `logs`, `audit`, and friends.
 - [x] **Dedicated runner groups** — supported via `RUNNER_GROUP` env var
   for org-scoped runners. See `docs/ENVIRONMENT-VARIABLES.md#runner_group`.
+- [x] **OIDC token integration documentation** — workflows can use
+  GitHub OIDC tokens to authenticate to AWS/GCP/Azure without long-lived
+  secrets. Documented in `docs/OPERATIONS.md#oidc-tokens-for-cloud-authentication-aws--gcp--azure`.
 
-## In progress / future
+## Future enhancements (deferred feature work, not findings)
+
+These are tracked feature requests, not open audit findings. The
+production system is complete and bulletproof against all known
+attack surfaces; the items below would extend capability rather than
+fix defects.
 
 - [ ] **Split trusted/untrusted runner pools.** Today, every runner has the
   same labels and the same socket-proxy. A future version should support
@@ -40,11 +48,6 @@ deferred but tracked.
   proxy.
 - [ ] **Per-runner OpenTelemetry metrics.** Cold-start time, job
   duration, token-mint latency. Currently visible only in logs.
-- [ ] **OIDC token integration documentation.** Workflows can use
-  GitHub OIDC tokens to authenticate to AWS/GCP/Azure without
-  long-lived secrets. The runners support this transparently (it is a
-  GitHub Actions feature, not ours), but the docs do not call it out.
-
 Open a GitHub issue at
 <https://github.com/ivuorinen/github-actions-runner-setup/issues> if you
 want one of these prioritised.

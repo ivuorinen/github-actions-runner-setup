@@ -3,6 +3,94 @@
 Read top-to-bottom; each section is self-contained but they appear in the
 rough order of how likely the issue is to appear during initial setup.
 
+## "Required environment variable is missing: \<NAME\>"
+
+```text
+[entrypoint] ERROR: Required environment variable is missing: GITHUB_APP_ID
+```
+
+Set the named variable in `.env` (or inject it via Coolify's environment
+panel). The complete reference is in `docs/ENVIRONMENT-VARIABLES.md`.
+Minimum set: `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`,
+`GITHUB_APP_PRIVATE_KEY_FILE`, `RUNNER_SCOPE`, `RUNNER_WORKDIR`, plus
+either `GITHUB_ORG` (org scope) or `GITHUB_REPO_OWNER` + `GITHUB_REPO_NAME`
+(repo scope).
+
+## "entrypoint.sh must run as root (UID 0)"
+
+```text
+[entrypoint] ERROR: entrypoint.sh must run as root (UID 0), got UID 1001
+```
+
+Something overrode the container's user. Check `docker-compose.yml` for an
+accidental `user:` key on a runner service — there should be none. The
+Dockerfile ends with `USER root` deliberately so that the entrypoint can
+read the PEM (UID 0, mode 600) before dropping privileges via gosu. See
+`.claude/rules/01-pem-must-be-root-mode-600.md`.
+
+## "Key file is not readable by root"
+
+```text
+[entrypoint] ERROR: Key file is not readable by root: /run/secrets/github_app_key
+```
+
+The PEM is bind-mounted but `chmod` denies even root read. This is rare
+but happens if the host file mode was `0000`. Fix on the host:
+
+```bash
+chmod 600 /etc/github-app/private-key.pem
+chown 0:0 /etc/github-app/private-key.pem
+docker compose restart
+```
+
+## "Network error calling POST \<url\>"
+
+```text
+[entrypoint] ERROR: Network error calling POST https://api.github.com/app/installations/...
+```
+
+curl could not reach api.github.com (or your GHES API). Common causes:
+
+- DNS resolution failure — `docker compose exec runner-1 getent hosts api.github.com`
+- Corporate proxy not configured — set `HTTPS_PROXY` per `docs/OPERATIONS.md`
+- IPv6-only network where api.github.com has no AAAA record — see
+  `docs/OPERATIONS.md` "DNS / IPv6"
+- GHES instance unreachable — confirm `GITHUB_API_URL` is correct and the
+  cert chain is trusted by the container
+
+Token-exchange retries: 3 attempts with curl exponential backoff and a
+per-attempt cap of 60 seconds (180s worst case).
+
+## "API returned no token" or "suspiciously short token"
+
+```text
+[entrypoint] ERROR: API returned no token: <github-side message>
+[entrypoint] ERROR: API returned a suspiciously short token (length 3)
+```
+
+GitHub responded but the `token` field was missing, null, or unreasonably
+short. The accompanying message is the `.message` field from GitHub's JSON
+response. Common causes:
+
+- The GitHub App lost the required permission (re-grant Self-hosted runners
+  read+write, or repo Administration read+write).
+- The installation was deleted or suspended.
+- A transient GitHub-side outage during partial degradation.
+
+Re-run after the underlying condition is fixed — the runner does not retry
+this class of error.
+
+## "RUNNER_LABELS is empty"
+
+```text
+[entrypoint] ERROR: RUNNER_LABELS is empty — set RUNNER_DEFAULT_LABELS or RUNNER_EXTRA_LABELS
+```
+
+You explicitly cleared `RUNNER_DEFAULT_LABELS` AND `RUNNER_EXTRA_LABELS`
+(or set `RUNNER_LABELS=` directly to empty). At least one of these must
+be non-empty. The default value
+`self-hosted,linux,x64,docker,ephemeral` is sufficient by itself.
+
 ## "Key file not found"
 
 ```text
@@ -161,6 +249,37 @@ the API:
 ```bash
 gh api -X DELETE /orgs/<ORG>/actions/runners/<RUNNER_ID>
 ```
+
+## socket-proxy reports unhealthy or `_ping` fails
+
+```bash
+docker compose ps
+# socket-proxy ... (unhealthy)
+```
+
+The proxy healthcheck is `wget --spider http://127.0.0.1:2375/_ping`.
+Failure modes:
+
+- **Host `/var/run/docker.sock` not mounted or missing.** The bind mount
+  in `docker-compose.yml` `socket-proxy.volumes:` points to the host
+  socket. On Coolify, the deployment must explicitly allow that mount.
+  Verify on the host:
+
+  ```bash
+  ls -la /var/run/docker.sock
+  ```
+
+- **Host Docker daemon stopped or restarting.** Restart `docker.service`
+  on the host (systemd) or via Docker Desktop UI.
+
+- **`PING: 1` accidentally removed from `socket-proxy.environment:`.**
+  Without it the proxy returns 403 on `/_ping`, marking the container
+  unhealthy. See `.claude/rules/11-socket-proxy-env-minimum.md`.
+
+If the proxy is unhealthy, runners will fail their `depends_on` startup
+condition (Compose blocks runners from starting). Workflows that
+require `docker pull` / `docker build` will fail at runtime even after
+runners start, because the proxy mediates all Docker calls.
 
 ## "docker: Cannot connect to the Docker daemon"
 
