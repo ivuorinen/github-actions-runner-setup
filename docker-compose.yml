@@ -161,13 +161,17 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
-    # Confirm the proxy's TCP listener on 2375 is accepting connections.
-    # tecnativa/docker-socket-proxy is based on Alpine and ships busybox nc.
-    # -z makes nc connect-only (no data), which is enough to verify haproxy
-    # has bound the socket — the proxy starts accepting before its upstream
-    # docker.sock is reachable, so this is a true readiness probe.
+    # End-to-end readiness probe: GET /_ping through the proxy. A 200 OK
+    # means (a) haproxy has bound the TCP listener and (b) the upstream
+    # docker.sock is reachable. A plain `nc -z 127.0.0.1 2375` would mark
+    # the proxy healthy as soon as haproxy bound — even when the host
+    # socket is missing or unmounted (Coolify misconfiguration), which
+    # would then surface as opaque "Cannot connect to the Docker daemon"
+    # errors inside workflows. wget is available in the upstream Alpine
+    # image; `PING: 1` (below) is what permits this request through the
+    # method/path allowlist.
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "2375"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2375/_ping || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
