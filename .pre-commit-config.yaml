@@ -45,6 +45,13 @@ repos:
     rev: v1.7.12
     hooks:
       - id: actionlint
+        # `-shellcheck=` disables actionlint's bundled shellcheck-via-actionlint
+        # pass. The shellcheck pre-commit hook above already covers shell
+        # content; disabling here avoids requiring shellcheck on PATH inside
+        # the actionlint pre-commit environment (which it does not provide).
+        # actionlint's other checks (workflow syntax, action references,
+        # injection-flagged `${{ github.event.* }}` in `run:` blocks) remain
+        # active.
         args: ["-shellcheck="]
 
   - repo: https://github.com/bridgecrewio/checkov.git

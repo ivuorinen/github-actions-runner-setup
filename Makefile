@@ -38,8 +38,11 @@ lint-yaml:  ## yamllint against docker-compose and CI workflows.
 
 .PHONY: lint-docker
 lint-docker:  ## hadolint against the Dockerfile (uses the pinned container).
+	# Aligned with .pre-commit-config.yaml (hadolint v2.14.0) so local and
+	# pre-commit runs use the same binary version. Renovate keeps the tag +
+	# digest in lockstep.
 	docker run --rm -i \
-	  hadolint/hadolint:v2.12.0@sha256:7dba9a9f1a0350f6d021fb2f6f88900998a4fb0aaf8e4330aa8c38544f04db42 \
+	  hadolint/hadolint:v2.14.0@sha256:27086352fd5e1907ea2b934eb1023f217c5ae087992eb59fde121dce9c9ff21e \
 	  hadolint - <Dockerfile
 
 .PHONY: lint-compose
