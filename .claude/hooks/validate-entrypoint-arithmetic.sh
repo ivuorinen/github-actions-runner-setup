@@ -2,6 +2,18 @@
 # PostToolUse hook: catch bash arithmetic with bitwise + comparison that is
 # missing protective inner parens. See
 # .claude/rules/09-arithmetic-precedence-bash.md
+#
+# Pattern in scope (described in words to avoid the regex matching this
+# very file): a bash arithmetic expansion opener, followed by an expression
+# that uses a bitwise operator and an equality comparison at the SAME paren
+# depth — meaning no closing paren between the bitwise operator and the
+# comparison. That is the precedence trap that broke the PEM mode check
+# (N-1) before the original fix.
+#
+# Whitespace is NOT required around the bitwise operator: the bug applies
+# equally to `a&b==c` and `a & b == c`, so we use `.*` between the opener
+# and the bitwise op and `[^)]*` (NO closing paren) between the bitwise op
+# and the comparison.
 
 set -Eeuo pipefail
 
@@ -14,23 +26,33 @@ case "${file_path}" in
 *) exit 0 ;;
 esac
 
-# Look for arithmetic expressions where a bitwise operator is immediately
-# followed by an equality comparison without a protecting paren around the
-# mask. Same shape applies to & | ^ vs == !=. The example case is below,
-# split across two strings so this comment does not trip the grep itself.
-# Bad pattern:  ((  <expr> SPACE BITWISE SPACE <mask> SPACE COMPARE <value>  ))
-# Bad example:  see scripts/entrypoint.sh pre-fix; preserved in
-#               .claude/rules/09-arithmetic-precedence-bash.md
-suspects="$(grep -nE '\(\([^()]*[[:space:]][&|^][[:space:]][^()]*(==|!=)' "${file_path}" || true)"
+# Skip files that exist specifically to document or detect this pattern.
+# Their comments and regex strings legitimately contain the trap shape.
+# Patterns allow both absolute paths (PostToolUse passes absolute) and
+# repo-relative paths (CI or manual invocation).
+case "${file_path}" in
+*.claude/rules/09-arithmetic-precedence-bash.md) exit 0 ;;
+*scripts/pre-commit-hooks/check-arithmetic-precedence.sh) exit 0 ;;
+*.claude/hooks/validate-entrypoint-arithmetic.sh) exit 0 ;;
+esac
+
+# Build the regex from pieces so this hook does not match itself when
+# scanning its own siblings. The literal we want is:
+#   bash-arith-open . any . bitwise . non-close-paren . equality
+arith_open='\('"'"
+arith_open="\(\("
+trap_re="${arith_open}.*[&|^][^)]*(==|!=)"
+
+suspects="$(grep -nE "${trap_re}" "${file_path}" || true)"
 
 if [[ -n "${suspects}" ]]; then
   cat >&2 <<MSG
 WARNING: ${file_path} contains arithmetic that may have an operator-
-precedence bug. In bash, \`==\` binds tighter than \`& | ^\`, so
-\`(a & b == c)\` parses as \`a & (b == c)\`. Wrap the bitwise part:
-\`((a & b) == c)\`.
+precedence bug. In bash, == binds tighter than & | ^, so an expression
+like a-AMP-b-EQ-c at the top level of a bash arithmetic context parses
+as a-AMP-(b-EQ-c). Wrap the bitwise sub-expression in its own parens.
 
-Lines:
+Suspicious lines:
 ${suspects}
 
 See .claude/rules/09-arithmetic-precedence-bash.md

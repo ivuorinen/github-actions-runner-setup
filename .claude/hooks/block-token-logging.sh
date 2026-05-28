@@ -17,14 +17,19 @@ esac
 content="${TOOL_INPUT_new_string:-${TOOL_INPUT_content:-}}"
 [[ -z "${content}" ]] && exit 0
 
-# Look for log/echo/printf statements that expand a token variable directly.
-# Examples that should block:
+# Look for log/echo/printf/tee statements that expand a token variable
+# directly. Examples that should block:
 #   log "token=${jwt}"
 #   echo "$installation_token"
 #   printf '%s\n' "${registration_token}"
 #   log "remove token: ${RUNNER_REMOVE_TOKEN}"
+#   tee /tmp/out <<< "${jwt}"
+#
+# `\b` (GNU regex word-boundary) is not portable to BSD grep on macOS,
+# so we use the explicit POSIX equivalent: end-of-line OR any non-
+# [A-Za-z0-9_] character (which covers `}`, space, quote, `,`, etc.).
 if printf '%s\n' "${content}" |
-  grep -nE '(^|;|[[:space:]])(log|echo|printf)[[:space:]]+[^#]*\$\{?(jwt|installation_token|registration_token|remove_token|RUNNER_REMOVE_TOKEN)\b'; then
+  grep -nE '(^|;|[[:space:]])(log|echo|printf|tee)[[:space:]]+[^#]*\$\{?(jwt|installation_token|registration_token|remove_token|RUNNER_REMOVE_TOKEN)([^A-Za-z0-9_]|$)'; then
   cat >&2 <<'MSG'
 BLOCKED: Detected a log/echo/printf statement expanding a token variable
 in entrypoint.sh. Token material must never reach stdout/stderr. Log only

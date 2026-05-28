@@ -19,9 +19,10 @@ if command -v hadolint >/dev/null 2>&1; then
   fi
 elif command -v docker >/dev/null 2>&1; then
   # Fall back to the official hadolint container if a local binary is absent.
-  # Pinned to a digest so this hook stays reproducible.
+  # Version aligned with .pre-commit-config.yaml and Makefile lint-docker;
+  # Renovate keeps the tag + digest in lockstep.
   if ! docker run --rm -i \
-    hadolint/hadolint:v2.12.0@sha256:7dba9a9f1a0350f6d021fb2f6f88900998a4fb0aaf8e4330aa8c38544f04db42 \
+    hadolint/hadolint:v2.14.0@sha256:27086352fd5e1907ea2b934eb1023f217c5ae087992eb59fde121dce9c9ff21e \
     hadolint - <"${file_path}" 2>/dev/null; then
     echo "WARNING: hadolint (containerized) flagged issues in ${basename}" >&2
   fi

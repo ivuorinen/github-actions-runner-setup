@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# PreToolUse hook: every .sh file must keep `set -Eeuo pipefail`. See
-# .claude/rules/02-entrypoint-shell-strict-mode.md
+# PreToolUse hook: every .sh file must declare strict mode (`set -Eeuo pipefail`
+# or an equivalent combination of long-form `set -o` directives) within the
+# first 30 lines. See .claude/rules/02-entrypoint-shell-strict-mode.md
+#
+# We only fire on Write of a complete file. Edit operations are not checked
+# here because TOOL_INPUT_new_string is a partial diff and we cannot tell
+# whether the rest of the file still declares strict mode. The PostToolUse
+# companion hook `validate-shell-strict-mode.sh` reads the on-disk file and
+# warns when strict mode is missing after an Edit.
+#
 # Exit code 2 = block the tool call
 
 set -Eeuo pipefail
@@ -13,18 +21,45 @@ case "${file_path}" in
 *) exit 0 ;;
 esac
 
-# For Write, the entire new file is in TOOL_INPUT_content. For Edit, the new
-# content is in TOOL_INPUT_new_string and is a partial — we cannot tell from
-# a partial whether the file still has `set -Eeuo pipefail` somewhere else,
-# so we only block on Write of a full file that omits the directive.
 content="${TOOL_INPUT_content:-}"
 [[ -z "${content}" ]] && exit 0
 
-if ! printf '%s\n' "${content}" | head -20 | grep -qE 'set[[:space:]]+-(E[a-z]*e[a-z]*|.*-o[[:space:]]+pipefail)'; then
+head_text="$(printf '%s\n' "${content}" | head -30)"
+
+# For each required flag, accept either the short-form cluster
+# (`set -…X…`) or the long-form `set -o <name>` line. Regex greediness +
+# backtracking handles letter ordering: in `set -Eeuo`, the regex
+# `set[[:space:]]+-[a-zA-Z]*e[a-zA-Z]*` matches because `[a-zA-Z]*` can
+# give up the `e` if needed.
+matches() {
+  printf '%s\n' "${head_text}" | grep -qE "$1"
+}
+
+has_E='no' has_e='no' has_u='no' has_pipefail='no'
+matches 'set[[:space:]]+-[a-zA-Z]*E[a-zA-Z]*' && has_E='yes'
+matches 'set[[:space:]]+-o[[:space:]]+errtrace' && has_E='yes'
+matches 'set[[:space:]]+-[a-zA-Z]*e[a-zA-Z]*' && has_e='yes'
+matches 'set[[:space:]]+-o[[:space:]]+errexit' && has_e='yes'
+matches 'set[[:space:]]+-[a-zA-Z]*u[a-zA-Z]*' && has_u='yes'
+matches 'set[[:space:]]+-o[[:space:]]+nounset' && has_u='yes'
+matches 'set[[:space:]]+-o[[:space:]]+pipefail' && has_pipefail='yes'
+matches 'set[[:space:]]+-[a-zA-Z]*o[a-zA-Z]*[[:space:]]+pipefail' && has_pipefail='yes'
+
+missing=()
+[[ "${has_E}" == 'yes' ]] || missing+=('-E (errtrace)')
+[[ "${has_e}" == 'yes' ]] || missing+=('-e (errexit)')
+[[ "${has_u}" == 'yes' ]] || missing+=('-u (nounset)')
+[[ "${has_pipefail}" == 'yes' ]] || missing+=('-o pipefail')
+
+if [[ ${#missing[@]} -gt 0 ]]; then
   cat >&2 <<MSG
-BLOCKED: Shell script ${file_path} must enable strict mode within the
-first 20 lines: \`set -Eeuo pipefail\`. See
-.claude/rules/02-entrypoint-shell-strict-mode.md
+BLOCKED: Shell script ${file_path} is missing required strict-mode flag(s):
+  ${missing[*]}
+
+Declare them within the first 30 lines, canonically as:
+  set -Eeuo pipefail
+
+See .claude/rules/02-entrypoint-shell-strict-mode.md
 MSG
   exit 2
 fi
