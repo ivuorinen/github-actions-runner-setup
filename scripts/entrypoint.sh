@@ -63,10 +63,17 @@ api() {
   #                           gives a 3-minute worst case for token endpoints
   #
   # Retries:
-  #   --retry 3              — 3 retries on top of the first attempt
-  #   --retry-all-errors     — also retry on 4xx (incl. 429) and HTTP errors
-  #   --retry-delay 0        — let curl use exponential backoff (1s, 2s, 4s, …)
-  #     (default; explicit for clarity)
+  #   --retry 3              — 3 retries on top of the first attempt.
+  #                            curl's default --retry covers transient
+  #                            errors (5xx, connection failures, timeouts).
+  #                            We intentionally do NOT pass --retry-all-errors:
+  #                            it would also retry on 401/403/404, which are
+  #                            authentication / permission / installation
+  #                            misconfiguration — wasteful and obscures the
+  #                            real error. 429 (rate limit) is rare for
+  #                            runner registration and the operator can
+  #                            re-deploy if hit. The exponential backoff
+  #                            (curl default: 1s, 2s, 4s, …) applies.
   #
   # API version 2022-11-28 is the long-term GA version; 2026-03-10 is the
   # newer default in the docs but offers nothing we need. Keep 2022-11-28
@@ -74,7 +81,7 @@ api() {
   local -a curl_args=(
     -sS --location
     --connect-timeout 10 --max-time 60
-    --retry 3 --retry-all-errors
+    --retry 3
     -X "${method}"
     -H 'Accept: application/vnd.github+json'
     -H "Authorization: Bearer ${token}"
@@ -213,6 +220,12 @@ cleanup() {
     (deregister_runner) || log 'Warning: failed to deregister runner'
   fi
 
+  # Wipe the in-memory token regardless of cleanup outcome. The shell
+  # exits immediately after but a defensive unset closes the window
+  # where a debugger attached at exit could read process memory.
+  RUNNER_REMOVE_TOKEN=""
+  unset RUNNER_REMOVE_TOKEN
+
   exit "${exit_code}"
 }
 
@@ -264,6 +277,16 @@ main() {
     : "${GITHUB_API_URL:=https://api.github.com}"
     : "${GITHUB_WEB_URL:=https://github.com}"
   fi
+  # Strip any trailing slash so request URLs do not end up with `//` in the
+  # path (which github.com forgives but some GHES versions return 404 on).
+  GITHUB_API_URL="${GITHUB_API_URL%/}"
+  GITHUB_WEB_URL="${GITHUB_WEB_URL%/}"
+
+  # Disable core dumps so that a runner crash with the JWT, installation
+  # token, or remove token in memory cannot leak credential bytes to disk
+  # via a core file. tmpfs would discard them at container exit anyway,
+  # but explicit `ulimit -c 0` avoids the window between crash and exit.
+  ulimit -c 0
 
   # Build the runner label set from default and per-runner extra labels,
   # assembling here rather than in docker-compose.yml so that an empty
