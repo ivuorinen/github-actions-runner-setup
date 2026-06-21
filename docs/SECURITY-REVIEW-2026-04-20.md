@@ -1,5 +1,10 @@
 # Security Review — 2026-04-20
 
+> **Historical artifact.** Line numbers, file offsets, and counts in this
+> document reflect the repository as of 2026-04-20 and may no longer resolve to
+> the current code. The findings and their resolutions remain valid; see
+> `docs/audit/nitpicker-findings.md` for the live audit state.
+
 Repository: `ivuorinen/github-actions-runner-setup`
 Branch: `feat/ready-for-usage`
 Reviewer: Claude (Opus 4.7) via `/security-review` skill

@@ -53,7 +53,7 @@ its first job and the subsequent ephemeral exit:
 3. entrypoint.sh stats the PEM:
    - owner must be UID 0
    - mode must have no group/other bits set
-4. entrypoint.sh mints a JWT (RS256, iat=now-60, exp=now+540)
+4. entrypoint.sh mints a JWT (RS256, iat=now-60, exp=iat+540)
 5. POST /app/installations/{id}/access_tokens  → installation_token (ghs_*, 1h)
 6. POST /{org|repo path}/actions/runners/registration-token  → registration_token (1h)
 7. POST /{org|repo path}/actions/runners/remove-token  → RUNNER_REMOVE_TOKEN (1h)

@@ -36,7 +36,7 @@ chmod 600 /etc/github-app/private-key.pem
 `scripts/entrypoint.sh` calls `stat -c '%u'` and `stat -c '%a'` on
 `${GITHUB_APP_PRIVATE_KEY_FILE}` and refuses to start unless owner is `0`
 and mode has no group/other access bits set
-(`((((8#${mode}) & 077)) == 0)` — note the load-bearing inner parens; see
+(`((((8#${key_mode}) & 077) == 0))` — note the load-bearing inner parens; see
 rule 09).
 
 See `docs/SECURITY-REVIEW-2026-04-20.md` finding **H-1**.
