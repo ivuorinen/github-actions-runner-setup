@@ -125,9 +125,11 @@ extract_token() {
     message="$(printf '%s' "${response}" | jq -r '.message // empty' 2>/dev/null || true)"
     fail "API returned no token${message:+: ${message}}"
   fi
-  # Defense in depth: the token must look like a GitHub App installation /
-  # registration token. They are all ≥40 chars, alphanumeric with underscores
-  # and dashes. A 1-char "token" indicates we parsed the wrong field.
+  # Defense in depth: a real installation / registration token is dozens of
+  # characters (alphanumeric with underscores and dashes). We reject anything
+  # shorter than 10 as a parse error (e.g. a 1-char value from the wrong JSON
+  # field) without asserting an exact length, since GitHub does not document a
+  # guaranteed minimum.
   if [[ "${#token}" -lt 10 ]]; then
     fail "API returned a suspiciously short token (length ${#token}); refusing to use it"
   fi
@@ -350,7 +352,12 @@ main() {
   # Remove tokens expire after 1 hour — sufficient for the startup→job window
   # of an ephemeral runner.  If the wait exceeds that, deregister_runner()
   # re-fetches a fresh token from the still-mounted PEM.
-  RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")"
+  # Non-fatal (N-76): deregister_runner() re-mints from the still-mounted PEM,
+  # so a transient failure here must not block the runner from starting.
+  RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")" || {
+    log 'Warning: could not pre-fetch remove token; will re-mint from PEM at cleanup if needed'
+    RUNNER_REMOVE_TOKEN=""
+  }
   target_url="$(runner_url)"
 
   if [[ -n "${RUNNER_INSTANCE_NAME:-}" ]]; then
