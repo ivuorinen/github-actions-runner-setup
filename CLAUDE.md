@@ -40,7 +40,10 @@ make lint-docker           # hadolint via the pinned container
 make lint-compose          # docker compose config --quiet
 ```
 
-Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint, checkov, hadolint, detect-private-key, and two local guards (arithmetic precedence trap, docker.sock-not-in-runner).
+Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint,
+checkov, hadolint, detect-private-key, and four local guards: arithmetic-precedence
+trap, docker.sock-not-in-runner, security invariants for rules 06/11/12/13 +
+`no-new-privileges`, and the `.claude/hooks` block/allow behavior test.
 
 ## Code Style
 
