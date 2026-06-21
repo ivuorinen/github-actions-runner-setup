@@ -1,9 +1,9 @@
 # Nitpicker Findings
 Generated: 2026-05-26
-Last validated: 2026-06-21 (Pass 106: functionality + documentation + image-existence validation — 9 findings, all fixed; audit-file Pass headers + ad-hoc IDs normalized)
+Last validated: 2026-06-21 (Pass 107: adversarial review of the PR #24 hardening changes themselves — 4 findings, all fixed; security_opt guard false-positive, advisory-hook test coverage, dead store, stale comment)
 
 ## Summary
-- Total: 77 | Open: 0 | Fixed: 76 | Invalid: 1 (machine-counted canonical `N-<n>` findings. Pass 106 fixed its own 9 findings, corrected the prior 69/1 mis-count, and canonicalized two ad-hoc Pass-53 ids — `TODO-OIDC`→`N-47`, `ENV-CLARITY`→`N-48`. One legacy invalid finding, `N-A` (Pass 1), keeps its label because its era's numeric id `N-21` was explicitly retired; it is intentionally not machine-counted.)
+- Total: 81 | Open: 0 | Fixed: 80 | Invalid: 1 (machine-counted canonical `N-<n>` findings. Pass 107 added N-79–N-82 (4 findings, all fixed in-pass). Pass 106 fixed its own 9 findings, corrected the prior 69/1 mis-count, and canonicalized two ad-hoc Pass-53 ids — `TODO-OIDC`→`N-47`, `ENV-CLARITY`→`N-48`. One legacy invalid finding, `N-A` (Pass 1), keeps its label because its era's numeric id `N-21` was explicitly retired; it is intentionally not machine-counted.)
 - Iterations 1-10: 23 findings (1 Critical + 8 High + 14 Medium/Low). All fixed.
 - Iterations 11-25: 5 findings (1 High + 4 Medium/Low). All fixed.
 - Iterations 26-50: 19 regression checks across linters, hooks, and PEM-mode invariants. All green. 0 new findings.
@@ -15,6 +15,7 @@ Last validated: 2026-06-21 (Pass 106: functionality + documentation + image-exis
 - Pass 104 (2026-06-21): full re-review against the live Claude Code hook contract + runtime. 8 new findings: 1 Critical (entire `.claude/hooks/*` enforcement layer is a silent no-op — reads `TOOL_INPUT_*` env vars that Claude Code never sets; real input is stdin JSON), 3 Medium (GHES `GITHUB_HOST` derivation defeated by compose URL defaults; no behavioral hook test; rules 06/11/12/13 lack commit-time/CI enforcement), 2 Low (stale Dockerfile base.name label, stale `.env.example` image version), 2 Advisory (comment/code mismatch in `extract_token`, rule-06 "PR time" wording). Root cause of N-61 going undetected for 103 passes: only the hook *logic* was ever reviewed, never whether the hook *fires*.
 - Pass 105 (2026-06-21): live functional validation of the built image + socket-proxy + entrypoint. All subsystems passed (socket-proxy 10/10 allow/deny, JWT RS256 verifies, token chain, PEM Phase A/B rejection, full lifecycle Phase C, capstone PEM unreadable by runner user). 1 new finding: N-69 (`no-new-privileges` load-bearing but unenforced — fixed).
 - Pass 106 (2026-06-21): goal-directed validation of (a) end-to-end functionality of the runner + socket-proxy, (b) all documentation, and (c) existence of every pinned Docker image. Real `docker build` (exit 0, 2.54 GB, all binaries present), `docker compose config` render + rules 04/05/11/12/N-69 assertions, hadolint/shellcheck/shfmt clean, all 4 guard scripts + the 26/26 hook behavioral test pass, every runnable rule `## Verification` confirmed, full line-by-line `entrypoint.sh` read (logic sound), registry inspection of all 3 pinned images (`docker buildx imagetools inspect`) + all 8 workflow action SHAs (all exist), ~135 documentation claims cross-checked. No Critical/High defects. 9 new findings: 2 Medium (the `no-new-privileges` guard is file-wide not per-service; rule 01 transcribes the PEM-mode arithmetic with the rule-09 anti-pattern), 4 Low (socket-proxy tag `0.4.2`→`v0.4.2`; rule 06 verification snippet false-positive; ARCHITECTURE JWT `exp` off by 60s; rule 06 example stale `2.334.0`), 3 Advisory. Pass-104/105 fixed invariants re-confirmed — no regressions. All 9 were then fixed and re-verified this pass (N-70 guard proven against a synthetic per-service `security_opt` override at the offending line; `test-hooks.sh` 26/26; shellcheck/shfmt clean; rule-06 verification now empty; `docker compose config` valid). Audit-file housekeeping (same pass): the 10 historical `### Pass N` headers that used range/parenthetical forms were normalized to the strict `Pass N — date` form (descriptions preserved as italic subtitles), and the two ad-hoc Pass-53 ids `TODO-OIDC`/`ENV-CLARITY` were canonicalized to `N-47`/`N-48`; `check-audit-consistency.py` now reports the file consistent (0 errors).
+- Pass 107 (2026-06-21): adversarial review of the PR #24 hardening changes themselves — the two new pre-commit scripts, the 17 stdin-JSON hook edits, and the compose/entrypoint changes. 4 new findings: 1 Medium (N-79: the `security_opt` per-service `awk` in `check-security-invariants.sh` false-positives when a comment or blank line precedes `no-new-privileges:true` — proven against a crafted compose), 1 Low (N-80: `test-hooks.sh` covered only the 11 PreToolUse blockers, leaving the 6 advisory PostToolUse hooks — equally hit by the N-61 stdin bug — unguarded), 2 Advisory (N-81 dead `arith_open` store; N-82 stale `TOOL_INPUT_new_string` comment). Verified-correct in the same review and intentionally NOT filed: the entrypoint `RUNNER_REMOVE_TOKEN` fallback (a global, not `local`, so the `||` branch fires on failure), the `: "${VAR:=default}"` GHES URL derivation against the now-empty compose defaults, and the `cap_add` guard's handling of indented comments/blank lines. All 4 fixed and re-verified in-pass (security_opt regression matrix c1-c4 + genuine-miss e1-e2; `test-hooks.sh` 26→32 cases all green; shellcheck/shfmt clean; the repo's own compose still passes).
 
 ## Iteration log
 
@@ -41,10 +42,44 @@ Additional fixes during late iterations (not assigned IDs because they were stra
 
 ## Open Findings
 
-_None._ Pass 106 (2026-06-21) found 9 issues (0 Critical/High); all were fixed
-and re-verified this pass — see **Fixed → Pass 106** below.
+_None._ Pass 107 (2026-06-21) found 4 issues (1 Medium, 1 Low, 2 Advisory; 0 Critical/High);
+all were fixed and re-verified this pass — see **Fixed → Pass 107** below.
 
 ## Fixed
+
+### Pass 107 — 2026-06-21
+
+#### [N-79] `check-security-invariants.sh` `security_opt` per-service check false-positives on a comment or blank line before the flag
+Category: reliability
+Area: `scripts/pre-commit-hooks/check-security-invariants.sh` (the `security_opt` block-form `awk`)
+Problem: The `awk` that implements the N-70 per-service check treats ANY non-list line after `security_opt:` as the end of the block via the catch-all rule `in_so { if (!has) print bl; in_so=0 }`. A `security_opt:` block whose first child is a YAML comment or a blank line is reported as missing `no-new-privileges:true` even when the flag is present on a following line.
+Evidence: A compose with `security_opt:` / `      # hardening` / `      - no-new-privileges:true` exits 1 with "a security_opt block omits 'no-new-privileges:true' ... at line(s): 4", although the flag is on the next line. The `cap_add` `awk` (specific end-conditions) and the inline-array form were not affected.
+Impact: False pre-commit/CI failures on valid, idiomatic YAML (comments and blank lines are common inside lists). Blocks legitimate commits and pressures contributors toward `--no-verify`, defeating the backstop N-64 added.
+Fix: Skip blank and comment lines while scanning the block (`in_so && /^[[:space:]]*#/ { next }` and `in_so && /^[[:space:]]*$/ { next }`) before the catch-all end-of-block rule. Re-verified the genuine-miss cases — including a comment before a truly missing flag in a second service — still fail, and the repo's own compose still passes.
+
+#### [N-80] `test-hooks.sh` did not exercise the 6 advisory PostToolUse hooks
+Category: tests
+Area: `scripts/pre-commit-hooks/test-hooks.sh`
+Problem: The behavioral test asserted block/allow exit codes for the 11 PreToolUse blockers but never invoked `post-edit-lint`, `validate-compose-on-edit`, `validate-dockerfile-on-edit`, `validate-entrypoint-arithmetic`, `validate-shell-strict-mode`, or `warn-entrypoint-token-handling`. All six were equally affected by the N-61 stdin regression (they read `TOOL_INPUT_*` env vars and did nothing). They always exit 0, so the exit-code model does not apply, but they emit a stderr warning on a violation — a regression that broke their stdin parsing would silently return them to no-op with no test signal. The header comment also overclaimed ("feeds ... payloads to each hook").
+Evidence: `grep` of the six hook names in `test-hooks.sh` returned no `run_case` invocations.
+Impact: The silent-no-op regression class the test exists to prevent stayed unguarded for 6 of 17 hooks.
+Fix: Added a `run_warn_case` helper that asserts stderr presence/absence, plus warn/quiet cases for the three dependency-free advisory hooks (`validate-shell-strict-mode`, `validate-entrypoint-arithmetic`, `warn-entrypoint-token-handling`); the other three shell out to external linters (`shfmt`/`hadolint`/`docker compose`) and are left to those tools' own suites. Coverage went 26 → 32 cases. Corrected the header comment.
+
+#### [N-81] Dead store of `arith_open` in `validate-entrypoint-arithmetic.sh`
+Category: maintainability
+Area: `.claude/hooks/validate-entrypoint-arithmetic.sh:49-50`
+Problem: `arith_open` was assigned a value and then immediately overwritten on the next line before any use — a dead store left over from building the self-non-matching regex.
+Evidence: The first assignment's value was never read; only the second assignment feeds `trap_re`.
+Impact: None functional; a confusing leftover in a security-relevant hook.
+Fix: Removed the dead first assignment.
+
+#### [N-82] Stale `TOOL_INPUT_new_string` reference in a hook comment
+Category: maintainability
+Area: `.claude/hooks/block-shell-strict-mode-removal.sh:7`
+Problem: A comment still referred to `TOOL_INPUT_new_string`, terminology from the pre-N-61 env-var era; the hook now reads `.tool_input.new_string` from stdin JSON. The substantive point (the new_string field is a partial diff) remains correct.
+Evidence: `grep TOOL_INPUT_ .claude/hooks/` matched only this comment.
+Impact: Minor confusion; no functional effect.
+Fix: Reworded to "the new_string payload field".
 
 ### Pass 106 — 2026-06-21
 
