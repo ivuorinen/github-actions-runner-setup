@@ -46,7 +46,6 @@ esac
 # Build the regex from pieces so this hook does not match itself when
 # scanning its own siblings. The literal we want is:
 #   bash-arith-open . any . bitwise . non-close-paren . equality
-arith_open='\('"'"
 arith_open="\(\("
 trap_re="${arith_open}.*[&|^][^)]*(==|!=)"
 

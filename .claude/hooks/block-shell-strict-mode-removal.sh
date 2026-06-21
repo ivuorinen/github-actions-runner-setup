@@ -4,7 +4,7 @@
 # first 30 lines. See .claude/rules/02-entrypoint-shell-strict-mode.md
 #
 # We only fire on Write of a complete file. Edit operations are not checked
-# here because TOOL_INPUT_new_string is a partial diff and we cannot tell
+# here because the new_string payload field is a partial diff and we cannot tell
 # whether the rest of the file still declares strict mode. The PostToolUse
 # companion hook `validate-shell-strict-mode.sh` reads the on-disk file and
 # warns when strict mode is missing after an Edit.
