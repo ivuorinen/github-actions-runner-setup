@@ -19,5 +19,6 @@ and how to verify compliance. Claude reads these as project memory.
 - `11-socket-proxy-env-minimum.md` — socket-proxy must expose only IMAGES/BUILD/POST/INFO/PING; CONTAINERS et al. are forbidden by default
 - `12-runner-cap-add-minimal.md` — runner services must drop ALL caps and re-add only CHOWN/DAC_OVERRIDE/FOWNER/SETGID/SETUID/KILL
 - `13-dockerfile-no-broad-copy.md` — `Dockerfile` must not `COPY . .` / `ADD .` — sources must be explicit paths
+- `14-use-context-mode-by-default.md` — default to context-mode (`ctx_execute`/`ctx_execute_file`/`ctx_fetch_and_index`) for anything that might fill the context window, not just known-large outputs
 
 Rules are advisory but reflect lessons learned. New rules go in this index when added.
