@@ -4,8 +4,8 @@ In `Dockerfile` and `docker-compose.yml`, every image reference must include
 the immutable digest in addition to the human-readable tag:
 
 ```text
-FROM ghcr.io/actions/actions-runner:2.334.0@sha256:b6614fce332517f74d0a76e7c762fb08e4f2ff13dcf333183397c8a5725b6e8e
-image: tecnativa/docker-socket-proxy:0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+FROM ghcr.io/actions/actions-runner:2.335.1@sha256:08c30b0a7105f64bddfc485d2487a22aa03932a791402393352fdf674bda2c29
+image: tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
 ```
 
 ## Why
@@ -17,7 +17,7 @@ references are vulnerable to:
 - **Registry compromise** — an attacker pushes a malicious image to the
   same tag and every `docker pull` ships it.
 - **Silent base-image breakage** — the maintainer republishes `latest` or
-  `2.334.0` with different contents and your runners pick it up on next
+  `2.335.1` with different contents and your runners pick it up on next
   rebuild.
 - **Reproducibility loss** — `docker build` two weeks apart produces
   different layers.
@@ -35,9 +35,11 @@ Manually editing the tag without the digest is forbidden.
 
 ```bash
 grep -nE '^FROM ' Dockerfile | grep -v '@sha256:'
-grep -nE 'image:' docker-compose.yml | grep -v '@sha256:'
+grep -E '^[[:space:]]*image:' docker-compose.yml | grep -vE 'local/|[$]\{' | grep -v '@sha256:'
 ```
 
 Both must produce no output.
 
-Enforced at PR time by `.claude/hooks/block-unpinned-base-image.sh`.
+Enforced client-side at edit time by `.claude/hooks/block-unpinned-base-image.sh`,
+and at commit/PR time by `scripts/pre-commit-hooks/check-security-invariants.sh`
+(run as a pre-commit local hook and in the `ci-lint` workflow).
