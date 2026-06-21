@@ -72,6 +72,8 @@ for f in "$@"; do
         if ($0 ~ /no-new-privileges:[[:space:]]*"?true/) has=1
         next
       }
+      in_so && /^[[:space:]]*#/ { next }
+      in_so && /^[[:space:]]*$/ { next }
       in_so { if (!has) print bl; in_so=0 }
       END { if (in_so && !has) print bl }
     ' "${f}")"

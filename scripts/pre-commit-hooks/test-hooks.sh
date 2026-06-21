@@ -3,10 +3,12 @@
 #
 # Each Claude Code PreToolUse/PostToolUse command hook receives the tool
 # payload as JSON on stdin (see https://code.claude.com/docs/en/hooks). This
-# test feeds canonical block-case and allow-case payloads to each hook and
-# asserts the exit code (2 = block, 0 = allow). It exists because the only
-# prior CI check was an executable-bit test, which let a 100%-dead hook layer
-# (every hook read non-existent TOOL_INPUT_* env vars) pass 103 review passes.
+# test feeds canonical payloads to each hook: PreToolUse blockers are asserted
+# on exit code (2 = block, 0 = allow); advisory PostToolUse hooks always exit 0
+# and are asserted on whether they emit the expected stderr warning. It exists
+# because the only prior CI check was an executable-bit test, which let a
+# 100%-dead hook layer (every hook read non-existent TOOL_INPUT_* env vars)
+# pass 103 review passes.
 #
 # Run: scripts/pre-commit-hooks/test-hooks.sh
 # Exits non-zero if any hook does not behave as expected.
@@ -37,6 +39,25 @@ run_case() {
   else
     fail=$((fail + 1))
     printf 'FAIL  %-34s %s (got exit %s, want %s)\n' "${hook}" "${desc}" "${rc}" "${expected}"
+  fi
+}
+
+# run_warn_case <hook> <warn|quiet> <description> <json-payload>
+# For advisory PostToolUse hooks that always exit 0 but print a stderr warning
+# on a violation. Asserts presence (warn) or absence (quiet) of stderr output,
+# so a silent stdin-parse regression (the N-61 class) is caught for them too.
+run_warn_case() {
+  local hook="$1" expect="$2" desc="$3" payload="$4"
+  local err got
+  err="$(printf '%s' "${payload}" | bash "${hooks_dir}/${hook}" 2>&1 >/dev/null || true)"
+  got="quiet"
+  [[ -n "${err}" ]] && got="warn"
+  if [[ "${got}" == "${expect}" ]]; then
+    pass=$((pass + 1))
+    printf 'PASS  %-34s %s (%s)\n' "${hook}" "${desc}" "${got}"
+  else
+    fail=$((fail + 1))
+    printf 'FAIL  %-34s %s (got %s, want %s)\n' "${hook}" "${desc}" "${got}" "${expect}"
   fi
 }
 
@@ -108,6 +129,36 @@ run_case block-shell-strict-mode-removal.sh 0 'strict-mode allowed' \
 run_case block-token-logging.sh 2 'token logging blocked' "$(write_json '/x/entrypoint.sh' 'log "token=${jwt}"')"
 run_case block-token-logging.sh 0 'metadata logging allowed' \
   "$(write_json '/x/entrypoint.sh' 'log "Obtained installation token"')"
+
+# --- advisory PostToolUse hooks (always exit 0; assert the stderr warning) ---
+# These warn-only hooks were equally affected by the env-var/stdin regression
+# (N-61); without a warning assertion a silent parse failure would go unnoticed.
+tmp_warn="$(mktemp -d)"
+trap 'rm -rf "${tmp_warn}"' EXIT
+
+printf '%s\n' '#!/usr/bin/env bash' 'echo hi' >"${tmp_warn}/no-strict.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' 'echo hi' >"${tmp_warn}/strict.sh"
+run_warn_case validate-shell-strict-mode.sh warn 'missing strict-mode warns' \
+  "$(write_json "${tmp_warn}/no-strict.sh" '')"
+run_warn_case validate-shell-strict-mode.sh quiet 'full strict-mode silent' \
+  "$(write_json "${tmp_warn}/strict.sh" '')"
+
+# Assemble the unparenthesized-trap line from a variable so this test file does
+# not itself trip the arithmetic-precedence-trap guard (same tactic as the
+# pk_marker above). The generated arith-bad.sh still contains the real literal.
+amp='&'
+printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' "((a ${amp} b == c))" >"${tmp_warn}/arith-bad.sh"
+printf '%s\n' '#!/usr/bin/env bash' 'set -Eeuo pipefail' "((((a ${amp} b)) == c))" >"${tmp_warn}/arith-ok.sh"
+run_warn_case validate-entrypoint-arithmetic.sh warn 'unparenthesized & == warns' \
+  "$(write_json "${tmp_warn}/arith-bad.sh" '')"
+run_warn_case validate-entrypoint-arithmetic.sh quiet 'parenthesized arithmetic silent' \
+  "$(write_json "${tmp_warn}/arith-ok.sh" '')"
+
+# shellcheck disable=SC2016
+run_warn_case warn-entrypoint-token-handling.sh warn 'token-handling edit warns' \
+  "$(write_json '/x/entrypoint.sh' 'installation_token="$(make_jwt x)"')"
+run_warn_case warn-entrypoint-token-handling.sh quiet 'unrelated edit silent' \
+  "$(write_json '/x/entrypoint.sh' 'echo hello world')"
 
 echo "----------------------------------------"
 echo "hook behavior: ${pass} passed, ${fail} failed"
