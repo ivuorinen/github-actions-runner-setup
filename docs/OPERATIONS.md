@@ -31,7 +31,7 @@ Key log lines from `entrypoint.sh`:
 | `Runner group: <name>`                     | Org-scoped runner with explicit group  |
 | `Unsetting post-registration configuration variables` | Pre-listener cleanup done       |
 | `Starting runner listener`                 | `run.sh` backgrounded, job-wait begins |
-| `Received SIGTERM, forwarding to runner listener` | Graceful shutdown in progress |
+| `Received SIG<sig>, forwarding to runner listener (PID <pid>) for graceful shutdown` | Graceful shutdown in progress |
 | `Removing runner registration`             | Cleanup path triggered                 |
 | `Warning: failed to deregister runner`     | Deregister errored; manual cleanup may be needed |
 | `ERROR: ...`                                | Fatal — see Troubleshooting             |

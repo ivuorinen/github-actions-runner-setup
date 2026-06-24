@@ -11,7 +11,14 @@
 
 set -Eeuo pipefail
 
-command="${TOOL_INPUT_command:-}"
+# Claude Code delivers the tool payload as JSON on stdin (NOT environment
+# variables). See https://code.claude.com/docs/en/hooks.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "BLOCKED: jq not found; $(basename "$0") cannot enforce; failing closed. Install jq." >&2
+  exit 2
+fi
+hook_input="$(cat)"
+command="$(jq -r '.tool_input.command // empty' <<<"${hook_input}" 2>/dev/null || true)"
 [[ -z "${command}" ]] && exit 0
 
 # Pattern A: explicit --force / -f flag (excluding --force-with-lease,

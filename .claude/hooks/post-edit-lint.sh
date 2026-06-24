@@ -4,7 +4,14 @@
 
 set -Eeuo pipefail
 
-file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
+# Claude Code delivers the tool payload as JSON on stdin (NOT environment
+# variables). See https://code.claude.com/docs/en/hooks.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "WARNING: jq not found; $(basename "$0") skipped. Install jq." >&2
+  exit 0
+fi
+hook_input="$(cat)"
+file_path="$(jq -r '.tool_input.file_path // empty' <<<"${hook_input}" 2>/dev/null || true)"
 [[ -z "${file_path}" ]] && exit 0
 [[ ! -f "${file_path}" ]] && exit 0
 

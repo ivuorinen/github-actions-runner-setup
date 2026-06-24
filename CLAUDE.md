@@ -40,7 +40,23 @@ make lint-docker           # hadolint via the pinned container
 make lint-compose          # docker compose config --quiet
 ```
 
-Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint, checkov, hadolint, detect-private-key, and two local guards (arithmetic precedence trap, docker.sock-not-in-runner).
+Pre-commit hooks enforce: shellcheck, shfmt, yamllint, markdownlint, actionlint,
+checkov, hadolint, detect-private-key, and four local guards: arithmetic-precedence
+trap, docker.sock-not-in-runner, security invariants for rules 06/11/12/13 +
+`no-new-privileges`, and the `.claude/hooks` block/allow behavior test.
+
+## Context efficiency
+
+Use the **context-mode** plugin (`ctx_execute` / `ctx_execute_file` /
+`ctx_fetch_and_index` + `ctx_search`) **by default** for anything that might
+fill the context window — not only known-large outputs. The test is "could this
+fill context?", and if the answer is yes or unsure (any command with
+unpredictable output size, file analysis, web fetches, repo-wide search), keep
+the raw bytes in the sandbox and let only a summary enter context. Raw
+Bash/`Read` stays correct for certainly-tiny verbatim output, `Edit`/`Write`
+mutations, and `Read`-before-`Edit`. The plugin is enabled in
+`.claude/settings.json` and auto-routes via a `PreToolUse` hook.
+See `.claude/rules/14-use-context-mode-by-default.md`.
 
 ## Code Style
 

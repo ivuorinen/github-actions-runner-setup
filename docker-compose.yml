@@ -24,9 +24,17 @@ x-runner-common: &runner-common
   # Runners reach the Docker daemon through socket-proxy (same Compose
   # project network) — they do not mount the host socket directly.
   # DOCKER_HOST is set per-service in each runner's environment block.
+  # GITHUB_API_URL / GITHUB_WEB_URL default to empty so entrypoint.sh can
+  # derive them from GITHUB_HOST for GHES (https://<host>/api/v3). A non-empty
+  # default here would defeat that derivation (see .env.example method (a)).
   tmpfs:
     - /tmp:size=1g,exec
     - /runner-tmp:size=128m,noexec,mode=0700,uid=${RUNNER_UID:-1001}
+  # no-new-privileges is load-bearing, NOT optional: the actions-runner base
+  # image ships a setuid-root /usr/bin/sudo and the runner user is in the sudo
+  # group. Without this flag a workflow job could `sudo cat` the root-owned PEM
+  # (/run/secrets/github_app_key) and steal the GitHub App key. Enforced by
+  # scripts/pre-commit-hooks/check-security-invariants.sh.
   security_opt:
     - no-new-privileges:true
   # Drop all Linux capabilities and re-add only the minimum needed:
@@ -75,8 +83,8 @@ services:
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
       GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
-      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
-      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-}
       RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
       GITHUB_ORG: ${GITHUB_ORG:-}
       GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
@@ -97,8 +105,8 @@ services:
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
       GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
-      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
-      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-}
       RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
       GITHUB_ORG: ${GITHUB_ORG:-}
       GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
@@ -119,8 +127,8 @@ services:
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID}
       GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
       GITHUB_HOST: ${GITHUB_HOST:-github.com}
-      GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}
-      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-https://github.com}
+      GITHUB_API_URL: ${GITHUB_API_URL:-}
+      GITHUB_WEB_URL: ${GITHUB_WEB_URL:-}
       RUNNER_SCOPE: ${RUNNER_SCOPE:-org}
       GITHUB_ORG: ${GITHUB_ORG:-}
       GITHUB_REPO_OWNER: ${GITHUB_REPO_OWNER:-}
@@ -133,7 +141,7 @@ services:
       RUNNER_EXTRA_LABELS: ${RUNNER_3_LABELS:-general}
 
   socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    image: tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     restart: unless-stopped
     # Read-only root filesystem with explicit tmpfs for haproxy's runtime
     # state (sockets, pid file). Defense-in-depth: if a workflow ever

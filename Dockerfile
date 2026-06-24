@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.title="github-app-actions-runner" \
       org.opencontainers.image.documentation="https://github.com/ivuorinen/github-actions-runner-setup/blob/main/README.md" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="ivuorinen" \
-      org.opencontainers.image.base.name="ghcr.io/actions/actions-runner:2.334.0"
+      org.opencontainers.image.base.name="ghcr.io/actions/actions-runner:2.335.1"
 
 # nosemgrep: dockerfile.security.last-user-is-root.last-user-is-root
 USER root

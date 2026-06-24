@@ -84,3 +84,14 @@ repos:
         entry: scripts/pre-commit-hooks/check-no-docker-sock-in-runner.sh
         language: script
         files: (docker-compose|compose)\.ya?ml$
+      - id: security-invariants
+        name: digest-pin / socket-proxy / caps / no-broad-copy invariants
+        entry: scripts/pre-commit-hooks/check-security-invariants.sh
+        language: script
+        files: (Dockerfile|(docker-compose|compose)\.ya?ml)$
+      - id: hook-behavior-test
+        name: .claude/hooks block/allow behavior test
+        entry: scripts/pre-commit-hooks/test-hooks.sh
+        language: script
+        files: ^\.claude/hooks/.*\.sh$
+        pass_filenames: false

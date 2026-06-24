@@ -1,9 +1,9 @@
 # Nitpicker Findings
 Generated: 2026-05-26
-Last validated: 2026-05-28 (Pass 103: pre-commit re-validation of working-tree deltas)
+Last validated: 2026-06-21 (Pass 107: adversarial review of the PR #24 hardening changes themselves — 4 findings, all fixed; security_opt guard false-positive, advisory-hook test coverage, dead store, stale comment)
 
 ## Summary
-- Total: 61 | Open: 0 | Fixed: 60 | Invalid: 1
+- Total: 81 | Open: 0 | Fixed: 80 | Invalid: 1 (machine-counted canonical `N-<n>` findings. Pass 107 added N-79–N-82 (4 findings, all fixed in-pass). Pass 106 fixed its own 9 findings, corrected the prior 69/1 mis-count, and canonicalized two ad-hoc Pass-53 ids — `TODO-OIDC`→`N-47`, `ENV-CLARITY`→`N-48`. One legacy invalid finding, `N-A` (Pass 1), keeps its label because its era's numeric id `N-21` was explicitly retired; it is intentionally not machine-counted.)
 - Iterations 1-10: 23 findings (1 Critical + 8 High + 14 Medium/Low). All fixed.
 - Iterations 11-25: 5 findings (1 High + 4 Medium/Low). All fixed.
 - Iterations 26-50: 19 regression checks across linters, hooks, and PEM-mode invariants. All green. 0 new findings.
@@ -12,6 +12,10 @@ Last validated: 2026-05-28 (Pass 103: pre-commit re-validation of working-tree d
 - Pass 55: 1 new finding (High — second-order bypass introduced by the Pass 53 force-push fix). Fixed.
 - Pass 56-67: 6 new findings. All fixed.
 - Pass 68-102: 3 new findings (curl retry semantics, tmpfs memory accounting undocumented, doc cross-reference gaps for new rules/healthcheck/macOS). All fixed. 32 additional probes ran with no new findings (operational config, doc depth, structural cross-checks).
+- Pass 104 (2026-06-21): full re-review against the live Claude Code hook contract + runtime. 8 new findings: 1 Critical (entire `.claude/hooks/*` enforcement layer is a silent no-op — reads `TOOL_INPUT_*` env vars that Claude Code never sets; real input is stdin JSON), 3 Medium (GHES `GITHUB_HOST` derivation defeated by compose URL defaults; no behavioral hook test; rules 06/11/12/13 lack commit-time/CI enforcement), 2 Low (stale Dockerfile base.name label, stale `.env.example` image version), 2 Advisory (comment/code mismatch in `extract_token`, rule-06 "PR time" wording). Root cause of N-61 going undetected for 103 passes: only the hook *logic* was ever reviewed, never whether the hook *fires*.
+- Pass 105 (2026-06-21): live functional validation of the built image + socket-proxy + entrypoint. All subsystems passed (socket-proxy 10/10 allow/deny, JWT RS256 verifies, token chain, PEM Phase A/B rejection, full lifecycle Phase C, capstone PEM unreadable by runner user). 1 new finding: N-69 (`no-new-privileges` load-bearing but unenforced — fixed).
+- Pass 106 (2026-06-21): goal-directed validation of (a) end-to-end functionality of the runner + socket-proxy, (b) all documentation, and (c) existence of every pinned Docker image. Real `docker build` (exit 0, 2.54 GB, all binaries present), `docker compose config` render + rules 04/05/11/12/N-69 assertions, hadolint/shellcheck/shfmt clean, all 4 guard scripts + the 26/26 hook behavioral test pass, every runnable rule `## Verification` confirmed, full line-by-line `entrypoint.sh` read (logic sound), registry inspection of all 3 pinned images (`docker buildx imagetools inspect`) + all 8 workflow action SHAs (all exist), ~135 documentation claims cross-checked. No Critical/High defects. 9 new findings: 2 Medium (the `no-new-privileges` guard is file-wide not per-service; rule 01 transcribes the PEM-mode arithmetic with the rule-09 anti-pattern), 4 Low (socket-proxy tag `0.4.2`→`v0.4.2`; rule 06 verification snippet false-positive; ARCHITECTURE JWT `exp` off by 60s; rule 06 example stale `2.334.0`), 3 Advisory. Pass-104/105 fixed invariants re-confirmed — no regressions. All 9 were then fixed and re-verified this pass (N-70 guard proven against a synthetic per-service `security_opt` override at the offending line; `test-hooks.sh` 26/26; shellcheck/shfmt clean; rule-06 verification now empty; `docker compose config` valid). Audit-file housekeeping (same pass): the 10 historical `### Pass N` headers that used range/parenthetical forms were normalized to the strict `Pass N — date` form (descriptions preserved as italic subtitles), and the two ad-hoc Pass-53 ids `TODO-OIDC`/`ENV-CLARITY` were canonicalized to `N-47`/`N-48`; `check-audit-consistency.py` now reports the file consistent (0 errors).
+- Pass 107 (2026-06-21): adversarial review of the PR #24 hardening changes themselves — the two new pre-commit scripts, the 17 stdin-JSON hook edits, and the compose/entrypoint changes. 4 new findings: 1 Medium (N-79: the `security_opt` per-service `awk` in `check-security-invariants.sh` false-positives when a comment or blank line precedes `no-new-privileges:true` — proven against a crafted compose), 1 Low (N-80: `test-hooks.sh` covered only the 11 PreToolUse blockers, leaving the 6 advisory PostToolUse hooks — equally hit by the N-61 stdin bug — unguarded), 2 Advisory (N-81 dead `arith_open` store; N-82 stale `TOOL_INPUT_new_string` comment). Verified-correct in the same review and intentionally NOT filed: the entrypoint `RUNNER_REMOVE_TOKEN` fallback (a global, not `local`, so the `||` branch fires on failure), the `: "${VAR:=default}"` GHES URL derivation against the now-empty compose defaults, and the `cap_add` guard's handling of indented comments/blank lines. All 4 fixed and re-verified in-pass (security_opt regression matrix c1-c4 + genuine-miss e1-e2; `test-hooks.sh` 26→32 cases all green; shellcheck/shfmt clean; the repo's own compose still passes).
 
 ## Iteration log
 
@@ -38,11 +42,234 @@ Additional fixes during late iterations (not assigned IDs because they were stra
 
 ## Open Findings
 
-_None._ All findings closed across 102 iterative passes.
+_None._ Pass 107 (2026-06-21) found 4 issues (1 Medium, 1 Low, 2 Advisory; 0 Critical/High);
+all were fixed and re-verified this pass — see **Fixed → Pass 107** below.
 
 ## Fixed
 
-### Pass 103 — 2026-05-28 (pre-commit re-validation of working-tree deltas)
+### Pass 107 — 2026-06-21
+
+#### [N-79] `check-security-invariants.sh` `security_opt` per-service check false-positives on a comment or blank line before the flag
+Category: reliability
+Area: `scripts/pre-commit-hooks/check-security-invariants.sh` (the `security_opt` block-form `awk`)
+Problem: The `awk` that implements the N-70 per-service check treats ANY non-list line after `security_opt:` as the end of the block via the catch-all rule `in_so { if (!has) print bl; in_so=0 }`. A `security_opt:` block whose first child is a YAML comment or a blank line is reported as missing `no-new-privileges:true` even when the flag is present on a following line.
+Evidence: A compose with `security_opt:` / `      # hardening` / `      - no-new-privileges:true` exits 1 with "a security_opt block omits 'no-new-privileges:true' ... at line(s): 4", although the flag is on the next line. The `cap_add` `awk` (specific end-conditions) and the inline-array form were not affected.
+Impact: False pre-commit/CI failures on valid, idiomatic YAML (comments and blank lines are common inside lists). Blocks legitimate commits and pressures contributors toward `--no-verify`, defeating the backstop N-64 added.
+Fix: Skip blank and comment lines while scanning the block (`in_so && /^[[:space:]]*#/ { next }` and `in_so && /^[[:space:]]*$/ { next }`) before the catch-all end-of-block rule. Re-verified the genuine-miss cases — including a comment before a truly missing flag in a second service — still fail, and the repo's own compose still passes.
+
+#### [N-80] `test-hooks.sh` did not exercise the 6 advisory PostToolUse hooks
+Category: tests
+Area: `scripts/pre-commit-hooks/test-hooks.sh`
+Problem: The behavioral test asserted block/allow exit codes for the 11 PreToolUse blockers but never invoked `post-edit-lint`, `validate-compose-on-edit`, `validate-dockerfile-on-edit`, `validate-entrypoint-arithmetic`, `validate-shell-strict-mode`, or `warn-entrypoint-token-handling`. All six were equally affected by the N-61 stdin regression (they read `TOOL_INPUT_*` env vars and did nothing). They always exit 0, so the exit-code model does not apply, but they emit a stderr warning on a violation — a regression that broke their stdin parsing would silently return them to no-op with no test signal. The header comment also overclaimed ("feeds ... payloads to each hook").
+Evidence: `grep` of the six hook names in `test-hooks.sh` returned no `run_case` invocations.
+Impact: The silent-no-op regression class the test exists to prevent stayed unguarded for 6 of 17 hooks.
+Fix: Added a `run_warn_case` helper that asserts stderr presence/absence, plus warn/quiet cases for the three dependency-free advisory hooks (`validate-shell-strict-mode`, `validate-entrypoint-arithmetic`, `warn-entrypoint-token-handling`); the other three shell out to external linters (`shfmt`/`hadolint`/`docker compose`) and are left to those tools' own suites. Coverage went 26 → 32 cases. Corrected the header comment.
+
+#### [N-81] Dead store of `arith_open` in `validate-entrypoint-arithmetic.sh`
+Category: maintainability
+Area: `.claude/hooks/validate-entrypoint-arithmetic.sh:49-50`
+Problem: `arith_open` was assigned a value and then immediately overwritten on the next line before any use — a dead store left over from building the self-non-matching regex.
+Evidence: The first assignment's value was never read; only the second assignment feeds `trap_re`.
+Impact: None functional; a confusing leftover in a security-relevant hook.
+Fix: Removed the dead first assignment.
+
+#### [N-82] Stale `TOOL_INPUT_new_string` reference in a hook comment
+Category: maintainability
+Area: `.claude/hooks/block-shell-strict-mode-removal.sh:7`
+Problem: A comment still referred to `TOOL_INPUT_new_string`, terminology from the pre-N-61 env-var era; the hook now reads `.tool_input.new_string` from stdin JSON. The substantive point (the new_string field is a partial diff) remains correct.
+Evidence: `grep TOOL_INPUT_ .claude/hooks/` matched only this comment.
+Impact: Minor confusion; no functional effect.
+Fix: Reworded to "the new_string payload field".
+
+### Pass 106 — 2026-06-21
+
+Goal-directed validation of (a) end-to-end functionality of the runner +
+socket-proxy, (b) all documentation, and (c) existence of every pinned Docker
+image (method/result in the Pass 106 Summary bullet). No Critical/High defects.
+All nine findings below were fixed in this pass and the fixes re-verified
+together: shellcheck + shfmt clean on the two edited scripts; the N-70 guard
+proven to reject a synthetic per-service `security_opt` override (exit 1 at the
+offending line) while the real files still pass; `test-hooks.sh` 26/26; the
+rule-06 verification command now returns empty; `docker compose config` valid.
+Each finding's "Fix:" line records the change that was applied.
+
+#### [N-70] `check-security-invariants.sh` verifies `no-new-privileges` file-wide, not per runner service
+Category: reliability
+Area: `scripts/pre-commit-hooks/check-security-invariants.sh:56-61`, `docker-compose.yml:38-39`
+Problem: The N-69 guard asserts `no-new-privileges:true` with a single file-wide `grep` that needs only ONE match anywhere in the compose file. `security_opt` lives in the `&runner-common` anchor, but YAML merge (`<<:`) REPLACES — does not deep-merge — a mapping key, exactly like `environment:` (rule 05). A runner service that declares its own `security_opt:` drops `no-new-privileges` while the anchor's occurrence (and socket-proxy's) keep the grep green.
+Evidence: Adding to any runner —
+```yaml
+  runner-2:
+    <<: *runner-common
+    security_opt:
+      - seccomp:unconfined
+```
+makes `docker compose config` render runner-2 WITHOUT `no-new-privileges:true` (the anchor list is replaced), yet `check-security-invariants.sh docker-compose.yml` still exits 0 because the string remains in the anchor block and on socket-proxy. The guard added specifically to protect a "load-bearing" control cannot detect its most realistic regression.
+Impact: A per-service `security_opt` override silently re-opens the `sudo cat /run/secrets/github_app_key` PEM-theft path (the exact scenario N-69 documents) with no CI/commit-time signal.
+Fix: Assert per service, not per file — render `docker compose config` and confirm every `runner-*` service's `security_opt` contains `no-new-privileges:true`; or, without docker, fail if any block under `services:` defines a `security_opt:` that omits the flag. Keep the existing `:false` check.
+
+#### [N-71] Rule 01 transcribes the PEM-mode check with the wrong parenthesization — the rule-09 anti-pattern, inside a security rule
+Category: docs
+Area: `.claude/rules/01-pem-must-be-root-mode-600.md:39`
+Problem: Rule 01 documents the entrypoint's mode check as `((((8#${mode}) & 077)) == 0)`, which places `== 0` OUTSIDE the inner arithmetic — precisely the operator-precedence mistake rule 09 exists to prevent. The real code is `((((8#${key_mode}) & 077) == 0))` (comparison INSIDE the `(( ))`). The rule also uses the stale variable name `mode` (the source uses `key_mode`).
+Evidence: rule 01:39 `((((8#${mode}) & 077)) == 0)` vs `scripts/entrypoint.sh:338` `((((8#${key_mode}) & 077) == 0))`. A maintainer copying the rule's form to "verify" the check gets a structurally different (broken) expression — self-contradictory given rule 09 and that this line enforces H-1 PEM isolation.
+Impact: Misleading documentation of a security-critical invariant; risks a "fix" that aligns correct code to the broken doc.
+Fix: Replace the quoted expression with `((((8#${key_mode}) & 077) == 0))` and rename `mode`→`key_mode` to match the source.
+
+#### [N-72] socket-proxy image tag `0.4.2` does not exist on Docker Hub (published tag is `v0.4.2`)
+Category: maintainability
+Area: `docker-compose.yml:144`, `.claude/rules/06-base-image-must-be-digest-pinned.md:8`
+Problem: The pinned reference `tecnativa/docker-socket-proxy:0.4.2@sha256:1f3a6f30…` carries a tag (`0.4.2`, no `v`) that does not exist in the registry; upstream publishes `v`-prefixed tags. The digest is correct and authoritative, so deploy-by-digest is unaffected — which is why it went unnoticed.
+Evidence: `docker buildx imagetools inspect tecnativa/docker-socket-proxy:0.4.2` → `ERROR: not found`; Docker Hub API `/tags/0.4.2` → 404; registry v2 manifest GET for `0.4.2` → HTTP 404. `…:v0.4.2` resolves to exactly the pinned digest `sha256:1f3a6f30…b47476` (last_updated 2025-12-16). The base runner (`2.335.1`) and hadolint (`v2.14.0`) pins have correct, consistent tag↔digest pairs.
+Impact: (a) a human cannot reproduce via `docker pull tecnativa/docker-socket-proxy:0.4.2`; (b) Renovate tracks this image and a `0.4.2`-vs-`v0.4.2` mismatch can cause mis-detection / stalled updates.
+Fix: `image: tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476` (digest unchanged). Update rule 06's example tag to match.
+
+#### [N-73] Rule 06 "## Verification" command false-positives on the local runner image, contradicting "must produce no output"
+Category: docs
+Area: `.claude/rules/06-base-image-must-be-digest-pinned.md` (Verification block)
+Problem: The rule's documented check `grep -nE 'image:' docker-compose.yml | grep -v '@sha256:'` is stated to "produce no output", but it matches `docker-compose.yml:8` `image: ${RUNNER_IMAGE_NAME:-local/github-app-actions-runner:latest}` — the locally-built runner image, which by design cannot carry a registry digest. So the rule's own verification "fails" on a compliant repo.
+Evidence: Running the rule's grep returns line 8. The canonical guard `check-security-invariants.sh:43-44` correctly excludes these with `grep -vE 'local/|[$]\{'` and passes (confirmed by execution this pass).
+Impact: An operator following the rule doc to self-check sees a spurious failure and may "fix" a non-issue or distrust the invariant.
+Fix: Align the rule's compose verification snippet with the guard: `grep -E '^[[:space:]]*image:' docker-compose.yml | grep -vE 'local/|[$]\{' | grep -v '@sha256:'` (expected: empty).
+
+#### [N-74] ARCHITECTURE.md states JWT `exp=now+540`; actual is `now+480` (`exp=iat+540`, `iat=now-60`)
+Category: docs
+Area: `docs/ARCHITECTURE.md:56`
+Problem: The JWT-minting description gives `exp=now+540`, but the code computes `exp` from `iat` (which is `now-60`), so `exp = now+480`. The total iat→exp validity of 540 s (9 min) is stated correctly elsewhere (line 79); only this term is wrong.
+Evidence: doc `iat=now-60, exp=now+540` (ARCHITECTURE.md:56) vs `scripts/entrypoint.sh:30-31` `iat="$((now - 60))"; exp="$((iat + 540))"` → `now+480`.
+Impact: Minor numeric inaccuracy in the architecture reference.
+Fix: Change `exp=now+540` to `exp=iat+540` (equivalently `exp=now+480`).
+
+#### [N-75] Rule 06 example uses stale runner version 2.334.0 (current pin is 2.335.1)
+Category: docs
+Area: `.claude/rules/06-base-image-must-be-digest-pinned.md:7,20`
+Problem: The worked example shows `FROM ghcr.io/actions/actions-runner:2.334.0@sha256:b6614fce…` and references `2.334.0` in prose, while the live pin is `2.335.1@sha256:08c30b0a…`. Same staleness class as the already-fixed N-65 (Dockerfile label), but in the rule's illustrative example.
+Evidence: rule 06:7 `2.334.0@sha256:b6614fce…` vs `Dockerfile:11` `2.335.1@sha256:08c30b0a…`.
+Impact: A reader may believe 2.334.0 is current; the example digest no longer matches anything in the repo.
+Fix: Update the example to the current 2.335.1 digest, OR de-version it to `<tag>@sha256:<digest>` so it cannot go stale.
+
+#### [N-76] Startup hard-fails if the remove-token pre-fetch errors, despite the cleanup PEM-refetch fallback making it non-essential
+Category: reliability
+Area: `scripts/entrypoint.sh:355`
+Problem: `RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")"` runs under `set -e`; on an API error `get_remove_token`→`api`→`fail` exits, aborting `main()` before the runner ever registers or runs. Yet `deregister_runner` (lines 198-208) explicitly handles an empty `RUNNER_REMOVE_TOKEN` by re-minting from the still-mounted PEM, so the pre-fetch is declared a non-essential optimization.
+Evidence: A transient 5xx on `…/actions/runners/remove-token` (after retries) makes the container exit 1 even though registration (the prior, same-family call) succeeded and cleanup could recover the token later.
+Impact: Low — couples startup availability to a step the design treats as optional. Failing fast also has merit (surfaces misconfig); behavior is safe, just stricter than the fallback implies.
+Fix (optional): make the pre-fetch non-fatal — `RUNNER_REMOVE_TOKEN="$(get_remove_token "${installation_token}")" || { log 'Warning: remove-token pre-fetch failed; will re-mint from PEM at cleanup'; RUNNER_REMOVE_TOKEN=""; }`.
+
+#### [N-77] OPERATIONS.md log-line table abbreviates the SIGTERM message
+Category: docs
+Area: `docs/OPERATIONS.md:34`
+Problem: The grep-able log-line table shows `Received SIGTERM, forwarding to runner listener`, but the emitted line is `Received SIG${sig}, forwarding to runner listener (PID ${runner_pid}) for graceful shutdown`. The prefix matches for sig=TERM; the `(PID …) for graceful shutdown` suffix is dropped. The other table rows match exactly.
+Evidence: OPERATIONS.md:34 vs `scripts/entrypoint.sh:244`.
+Impact: Cosmetic — an operator grepping the full quoted string past "…runner listener" finds nothing.
+Fix (optional): append `(PID <pid>) for graceful shutdown` (or `…`) to the table cell for parity with the other rows' placeholder style.
+
+#### [N-78] SECURITY-REVIEW-2026-04-20.md carries point-in-time line refs/counts that no longer resolve
+Category: docs
+Area: `docs/SECURITY-REVIEW-2026-04-20.md` (e.g. :75, :464, :472)
+Problem: This dated review references line numbers and counts from the 2026-04-20 codebase (e.g. "docker-compose.yml:95 …digest" is now line 144; "6/6 hooks" is now 17 hooks; a `FROM …2.333.1` example). It is a historical artifact, not live documentation.
+Evidence: Cross-checking its cited line numbers against the current tree shows drift (confirmed for the socket-proxy image line, hook count, and FROM example).
+Impact: None for setup/operations; flagged only because the validation brief covered line-ref accuracy across all docs.
+Fix (optional, no content change required): add a one-line banner at the top — "Line numbers and counts reflect the repository as of 2026-04-20" — so readers don't treat its refs as current.
+
+### Pass 105 — 2026-06-21
+
+Live functional validation of the built image, socket-proxy, and entrypoint
+(image builds; socket-proxy 10/10 allow/deny; JWT RS256 verifies; token chain +
+error handling; healthcheck logic; rendered-config hardening; runtime CapEff;
+PEM rejection Phase A/B; full lifecycle Phase C to config.sh; runtime no-token
+logging; capstone PEM unreadable by the runner user). All subsystems passed; one
+new hardening finding surfaced.
+
+#### [N-69] `no-new-privileges:true` is load-bearing for PEM isolation but was unenforced
+Category: security
+Area: `docker-compose.yml`, `scripts/pre-commit-hooks/check-security-invariants.sh`
+Problem: The actions-runner base image ships a **setuid-root** `/usr/bin/sudo` and adds the runner user to the `sudo` group. `no-new-privileges:true` neutralizes this, but nothing enforced the flag's presence — an operator or regression removing it (or setting it `false`) would let a workflow `sudo cat /run/secrets/github_app_key` and steal the GitHub App key, collapsing the entire credential-isolation model.
+Evidence: Live test in the built image — `sudo` is `-rwsr-xr-x`; WITH `no-new-privileges` every escalation attempt failed (`sudo -n cat` denied, `sudo id` blocked, runner-user `CapEff=0000000000000000`). Compose sets the flag on all runners, but `check-security-invariants.sh` did not assert it, and no rule guarded it.
+Impact: A single accidental edit removing the flag silently opens a full PEM-theft path from any workflow job.
+Fix: Extended `check-security-invariants.sh` to fail if a compose file lacks `no-new-privileges:true` or sets it `false` (runs in CI + pre-commit); added a load-bearing comment in `docker-compose.yml`. Verified: real files pass; synthetic missing/false both fail; lint clean.
+Fixed: 2026-06-21
+Notes: Surfaced by the runtime escalation test, not static review — the dependency is only visible when you actually try to escalate in the real image.
+
+### Pass 104 — 2026-06-21
+
+Adversarial re-review against the live Claude Code hook contract and runtime.
+Eight new findings. The deployed-runtime security (PEM isolation, socket-proxy,
+caps, no-new-privileges, token handling) verified sound; failures were in the
+meta-enforcement layer and a GHES config path. Each finding's Fix line was
+applied and verified — see the per-finding evidence below.
+
+#### [N-61] Entire `.claude/hooks/*` enforcement layer was a silent no-op (reads env vars; Claude Code sends stdin JSON)
+Category: security
+Area: `.claude/hooks/*.sh` (all 17 hooks), `.claude/settings.json`
+Problem: Every hook reads tool input from `${TOOL_INPUT_command:-}` / `${TOOL_INPUT_FILE_PATH:-}` / `${TOOL_INPUT_new_string:-}` / `${TOOL_INPUT_content:-}` environment variables. Claude Code does not set any `TOOL_INPUT_*` variables — per the official hooks reference, a command hook receives the tool input as a JSON object on **stdin** (`{"tool_name":...,"tool_input":{"command":...}}`). Each hook's first action is `[[ -z "${command}" ]] && exit 0` (or the file_path equivalent), so with the env var unset every hook reads `""` and immediately exits 0 (allow). None read stdin; none use jq.
+Evidence:
+1. Official docs (code.claude.com/docs/en/hooks): "For command hooks, input arrives on stdin"; the documented PreToolUse schema is stdin JSON with no env-var form. Hooks only inherit the parent env plus `CLAUDE_PROJECT_DIR`.
+2. Live session test: running `cat .env` via the Bash tool was **not** blocked even though `block-cat-secrets.sh` is registered on the Bash matcher — `cat` executed and failed only on the missing file.
+3. Direct test: `printf '{"tool_name":"Bash","tool_input":{"command":"cat .env"}}' | bash .claude/hooks/block-cat-secrets.sh` → exit 0 (allow). `TOOL_INPUT_command='cat .env' bash .claude/hooks/block-cat-secrets.sh </dev/null` → exit 2 (block). The hook fires only on an env var Claude never sets.
+4. `grep` over all hooks: 17/17 read `TOOL_INPUT_*`; 0/17 read stdin or jq.
+Impact: All 17 client-side guards are disabled — secret-dump blocking, force-push-to-main, socket-mount (rule 04), digest-pin (rule 06), strict-mode (rule 02), token-logging (rule 03), socket-proxy widening (rule 11), cap widening (rule 12), broad-COPY (rule 13), `.env` edit, secret-pattern scan, and all 6 PostToolUse validators. Rules 03/06/11/12/13 and the secret/force-push guards have no other automated enforcement, so those invariants are unguarded against regressions made in a Claude session. `SECURITY.md` and four rule files assert these hooks enforce trust boundaries; those claims are false until this is fixed.
+Fix: Rewrite each hook to read the JSON payload from stdin and extract fields with jq: `input="$(cat)"; command="$(jq -r '.tool_input.command // empty' <<<"$input")"`; `file_path="$(jq -r '.tool_input.file_path // empty' <<<"$input")"`; `content="$(jq -r '.tool_input.new_string // .tool_input.content // empty' <<<"$input")"`. Add a jq-presence guard that fails closed (exit 2) in the blocking PreToolUse hooks. Add a behavioral test (N-63) wired into CI so this cannot regress silently.
+
+#### [N-62] GHES `GITHUB_HOST`-only setup (documented method (a)) was defeated by compose URL defaults
+Category: correctness
+Area: `docker-compose.yml` (GITHUB_API_URL/GITHUB_WEB_URL ×3), `.env.example`, `scripts/entrypoint.sh:273-283`
+Problem: entrypoint derives the GHES API/web URLs from `GITHUB_HOST` only when `GITHUB_API_URL`/`GITHUB_WEB_URL` are unset/empty (`: "${GITHUB_API_URL:=https://${GITHUB_HOST}/api/v3}"`). But docker-compose.yml sets `GITHUB_API_URL: ${GITHUB_API_URL:-https://api.github.com}` (and WEB_URL likewise) on every runner service, so the container always receives a non-empty `https://api.github.com`. The `:=` default becomes a no-op and the derivation never runs under compose. `.env.example` also ships both URL lines uncommented at the github.com values.
+Evidence: With `.env` containing only `GITHUB_HOST=ghes.example.com`, compose interpolates `GITHUB_API_URL=https://api.github.com`; entrypoint takes the `!= github.com` branch but `:=` leaves the already-set value untouched, so the runner calls `https://api.github.com/app/installations/...` with a GHES app and fails auth. `.env.example:23`, `docs/ENVIRONMENT-VARIABLES.md:63`, and `SETUP.md:255-264` all promise "set GITHUB_HOST only — entrypoint derives the API and web URLs automatically."
+Impact: The documented GHES quick-path is broken via the only supported deployment mechanism. A GHES operator following SETUP.md gets a confusing auth failure against api.github.com. Method (b) (set all three) works; method (a) does not.
+Fix: In docker-compose.yml change the three pairs to `GITHUB_API_URL: ${GITHUB_API_URL:-}` / `GITHUB_WEB_URL: ${GITHUB_WEB_URL:-}` so entrypoint owns defaulting/derivation; comment out the `GITHUB_API_URL=`/`GITHUB_WEB_URL=` lines in `.env.example` so method (a) is the default. `${var:=}` treats empty as unset, so derivation fires.
+
+#### [N-63] No behavioral test that hooks actually block; only an executable-bit check
+Category: tests
+Area: `.github/workflows/ci-lint.yml`, `.claude/hooks/`
+Problem: CI's only hook check is `find .claude/hooks -name '*.sh' -not -perm -u+x` (executable bit). Nothing feeds a representative payload to a hook and asserts block/allow. This is why N-61 — a 100%-dead enforcement layer — went undetected through 103 passes of detailed per-hook logic review.
+Evidence: `ci-lint.yml:62-73` checks executability only; no test pipes stdin JSON and asserts an exit code.
+Impact: Any future regression to the hook input contract or logic passes CI silently.
+Fix: Add `scripts/pre-commit-hooks/test-hooks.sh` that pipes canonical PreToolUse JSON (block and allow cases) into each hook and asserts exit 2 / exit 0; run it from ci-lint.yml and as a pre-commit local hook.
+
+#### [N-64] Rules 03/06/11/12/13 + secret/force-push guards have no commit-time/CI enforcement, only the client-side hooks
+Category: reliability
+Area: `.github/workflows/ci-lint.yml`, `scripts/pre-commit-hooks/`, `.claude/rules/{06,11,12,13}`
+Problem: Even after N-61 is fixed, the `.claude/hooks` mediate only edits made through Claude Code. A human (or any non-Claude tool) editing docker-compose.yml/Dockerfile directly faces no guard for digest-pinning (06), socket-proxy surface (11), runner caps (12), or broad COPY (13). Rules 04 and 09 already have CI/pre-commit scripts; 06/11/12/13 do not.
+Evidence: Each rule's "Verification" section is a one-line grep, but none of those greps run in CI or pre-commit. `ci-lint.yml` runs only the rule-04 and rule-09 scripts.
+Impact: The repo's security invariants are only as strong as the weakest editor path; a direct PR adding `CONTAINERS: 1` or `SYS_PTRACE` to compose passes all CI.
+Fix: Add the documented verification greps as a CI step ("Verify security invariants") and/or pre-commit local hooks mirroring `check-no-docker-sock-in-runner.sh`, covering rules 06/11/12/13.
+
+#### [N-65] Dockerfile `org.opencontainers.image.base.name` label was stale (`2.334.0` vs `FROM` `2.335.1`)
+Category: maintainability
+Area: `Dockerfile:11,21`
+Problem: FROM pins `actions-runner:2.335.1@sha256:...` but the `base.name` annotation still says `2.334.0`. Renovate updates the FROM tag/digest but not the free-text LABEL, so it drifts every bump.
+Evidence: `Dockerfile:11` → `2.335.1`; `Dockerfile:21` → `...image.base.name="ghcr.io/actions/actions-runner:2.334.0"`.
+Impact: Scanners/registries surface a base image that doesn't match the actual base layer; misleading provenance.
+Fix: Update the label to `2.335.1`. To stop recurring drift, drop the version from `base.name` (use `ghcr.io/actions/actions-runner`) or add a Renovate customManager for the LABEL line.
+
+#### [N-66] `.env.example` `id runner` hint references stale runner image `2.333.1`
+Category: docs
+Area: `.env.example:62`
+Problem: The RUNNER_UID verification comment runs `docker run --rm ghcr.io/actions/actions-runner:2.333.1 id runner` — two minor versions behind the pinned base (2.335.1).
+Evidence: `.env.example:62`.
+Impact: Operator pulls an outdated image to verify a UID; minor confusion.
+Fix: Bump to 2.335.1 or make the hint version-agnostic.
+
+#### [N-67] `extract_token` length-guard comment said "≥40 chars" but the check is `< 10`
+Category: maintainability
+Area: `scripts/entrypoint.sh:128-133`
+Problem: The comment states tokens are "≥40 chars" but the guard rejects only length `< 10`. The loose bound is fine defensively; the comment overstates it.
+Evidence: `entrypoint.sh:131` → `if [[ "${#token}" -lt 10 ]]`.
+Impact: Misleading comment; no runtime effect.
+Fix: Reword the comment to match the `< 10` sanity bound.
+
+#### [N-68] Rule 06 says digest-pinning is "Enforced at PR time by `.claude/hooks/...`"; hooks are client-side session-time
+Category: docs
+Area: `.claude/rules/06-base-image-must-be-digest-pinned.md:43`
+Problem: The hook runs at edit time inside a Claude Code session, not at PR/CI time. CI does not currently check digest pinning (see N-64).
+Evidence: rule 06 line 43.
+Impact: Overstates where enforcement happens; a reader assumes CI blocks unpinned images.
+Fix: Reword to "Enforced client-side at edit time by the hook (and, once N-64 lands, by CI)." — done.
+
+### Pass 103 — 2026-05-28
+
+_Pre-commit re-validation of working-tree deltas._
 
 Re-validated all 60 prior findings against the working tree before committing
 the uncommitted changes in grouped commits: shellcheck clean, shfmt clean,
@@ -60,7 +287,9 @@ logic and would drift out of sync with the real rules on a future edit.
 Removed it. Behaviour unchanged (verified: shellcheck clean, hook still exits
 0 on the current compose and blocks a synthetic `- SYS_PTRACE` line).
 
-### Pass 68-102 — 2026-05-27 (operational + structural exhaustion)
+### Pass 102 — 2026-05-27
+
+_Passes 68-102 — operational + structural exhaustion._
 
 35 fresh adversarial probes spanning: curl retry semantics, JWT clock-skew edges, stat portability, argument injection, signal handling, tmpfs/mem_limit interaction, log-driver disk-fill, Compose schema (depends_on conditions, env_file required, network defaults), pre-commit pin staleness, hadolint exit-code, actionlint rationale, Renovate config validity, README/SETUP macOS coverage, ARCHITECTURE token-chain accuracy, OPERATIONS scaling, SECURITY rule cross-refs, TROUBLESHOOTING socket-proxy healthcheck, ENVIRONMENT-VARIABLES tmpfs accounting, CONTRIBUTING rule references, hook executability, every CI file reference, every Dockerfile COPY source, every `.gitignore`/`.dockerignore` secret pattern, every audit ID with a definition, every internal markdown anchor resolves. 3 new findings:
 
@@ -82,7 +311,9 @@ Notes: Five small documentation completeness gaps closed together since they sha
 - `CONTRIBUTING.md` Style section now references rules 10/11/12/13 by file path so a contributor reading the contribution guide finds them.
 - `TODO.md` "In progress / future" renamed to "Future enhancements (deferred feature work, not findings)" to disambiguate from open audit findings.
 
-### Pass 56-67 — 2026-05-27 (rule-enforcing hooks, API-contract harden, doc gaps)
+### Pass 67 — 2026-05-27
+
+_Passes 56-67 — rule-enforcing hooks, API-contract harden, doc gaps._
 
 #### [N-51] HIGH — Rules 11/12/13 lacked enforcing PreToolUse hooks
 Fixed: 2026-05-27
@@ -119,7 +350,9 @@ Each section explains the failure mode, lists likely causes, and gives the opera
 Fixed: 2026-05-27
 Notes: The 2026-04-20 review recommended lowering shellcheck severity from `warning` to `style`. The change was made (pre-commit-config.yaml now passes `--severity=style`), the summary table marked L-5 as Fixed, but the detail section under "## 4. Detailed findings" still read as an open recommendation. Updated to clearly mark **[FIXED]** with the original text preserved as historical context.
 
-### Pass 55 — 2026-05-27 (self-review of Pass 53/54 deltas)
+### Pass 55 — 2026-05-27
+
+_Self-review of Pass 53/54 deltas._
 
 #### [N-50] HIGH — `block-force-push-main.sh` Pass-53 fix missed several real force/delete forms
 Fixed: 2026-05-27
@@ -132,13 +365,17 @@ Rewrote the regexes:
 - Split delete detection into two: `push_colon_delete_re` (`:main` empty-source form) and `push_delete_flag_re` (`--delete` flag form with arbitrary remote between).
 Re-verified against 16 cases (9 BLOCK, 7 ALLOW). All classified correctly. The bypass classes — empty-source colon delete and bare `+main` — were both untested in Pass 53 (the test only covered the simple `+main` *with* a separator that I thought was required).
 
-### Pass 54 — 2026-05-27 (second-order audit)
+### Pass 54 — 2026-05-27
+
+_Second-order audit._
 
 #### [N-49] MEDIUM — `block-cat-secrets.sh` missed `/run/secrets/` and `github_app_key` paths
 Fixed: 2026-05-27
 Notes: `is_pem_target()` only matched the `.pem` filename suffix. But the actual PEM inside the container lives at `/run/secrets/github_app_key` (set by `GITHUB_APP_PRIVATE_KEY_FILE` in compose) — no `.pem` extension. A `cat /run/secrets/github_app_key` inside a runner shell would dump the most sensitive credential in the system and the hook would not block. Extended `is_pem_target()` to also match `/run/secrets/<anything>`, any path containing `github_app_key`, and any `private-key` token. Verified: 6/7 PEM-shaped paths now BLOCK, plus the existing `.pem` matcher, plus `README.md` still ALLOWs.
 
-### Pass 53 — 2026-05-27 (adversarial hook-bypass + CI correctness)
+### Pass 53 — 2026-05-27
+
+_Adversarial hook-bypass + CI correctness._
 
 #### [N-33] CRITICAL — CI smoke test never reaches the N-1 PEM-mode check
 Fixed: 2026-05-27
@@ -195,15 +432,17 @@ Notes: New `.claude/rules/12-runner-cap-add-minimal.md` documents the minimum ca
 Fixed: 2026-05-27
 Notes: New `.claude/rules/13-dockerfile-no-broad-copy.md` forbids whole-context copies that would bring `.env`, `*.pem`, `.git/`, `secrets/` into the image layer (`.dockerignore` is defense-in-depth but `COPY .` + a one-line `.dockerignore` mistake = silent secret leak). Indexed in rules README.
 
-#### [TODO-OIDC] — TODO.md "OIDC token integration documentation" closed
+#### [N-47] — TODO.md "OIDC token integration documentation" closed (formerly tracked as ad-hoc id `TODO-OIDC`)
 Fixed: 2026-05-27
 Notes: Added a comprehensive OIDC section to `docs/OPERATIONS.md` covering AWS / GCP / Azure federation, the required `permissions: id-token: write`, an end-to-end example with `aws-actions/configure-aws-credentials@v4`, and the GHES note about the per-instance OIDC issuer URL. Moved the item from the "In progress / future" section to "Done" in `TODO.md`.
 
-#### [ENV-CLARITY] — `.env.example` confusing default for `GITHUB_REPO_OWNER`
+#### [N-48] — `.env.example` confusing default for `GITHUB_REPO_OWNER` (formerly tracked as ad-hoc id `ENV-CLARITY`)
 Fixed: 2026-05-27
 Notes: `GITHUB_REPO_OWNER=your-org` was misleading for the org-scope default — entrypoint ignores it but the literal placeholder suggested it was used. Cleared the default to empty and added a comment explaining when each scope reads which vars.
 
-### Pass 52 — 2026-05-27 (close-out: cosmetics elevated to blocking)
+### Pass 52 — 2026-05-27
+
+_Close-out: cosmetics elevated to blocking._
 
 #### [N-23] `RUNNER_LABELS` env var is set but unused for runner-N services
 Fixed: 2026-05-27
@@ -213,7 +452,9 @@ Notes: Added a commented `# RUNNER_LABELS=self-hosted,linux,x64,docker,ephemeral
 Fixed: 2026-05-27
 Notes: `entrypoint.sh` now reads `GITHUB_HOST` and derives `GITHUB_API_URL=https://<host>/api/v3` and `GITHUB_WEB_URL=https://<host>` when host ≠ `github.com`. Explicit overrides via `GITHUB_API_URL` / `GITHUB_WEB_URL` still take precedence (compose-style `:=` assignment). `docs/ENVIRONMENT-VARIABLES.md`, `.env.example`, and `SETUP.md` updated. New SETUP.md §10 "GitHub Enterprise Server (GHES)" walks operators through the setup. `CHANGELOG.md` added (previously referenced from `CONTRIBUTING.md` but didn't exist) and linked from README.
 
-### Pass 51 — 2026-05-27 (user-authorised settings.json registration + path-portability fix)
+### Pass 51 — 2026-05-27
+
+_User-authorised settings.json registration + path-portability fix._
 
 #### [N-32] HIGH — Hook commands use bare relative paths, breaking when `cwd ≠ project root`
 Fixed: 2026-05-27
@@ -231,7 +472,9 @@ Final hook layout:
 
 Verified: JSON parses, every referenced hook resolves to an executable file, every hook exits 0 on a benign no-op invocation (no spurious blocking).
 
-### Pass 2-10 — 2026-05-26 (deeper static + adversarial)
+### Pass 10 — 2026-05-26
+
+_Passes 2-10 — deeper static + adversarial._
 
 #### [N-24] HIGH — SIGTERM race window before runner_pid is assigned
 Fixed: 2026-05-26
@@ -249,7 +492,9 @@ Notes: `jq -r '.token // empty'` only catches `null` / absent, not an empty stri
 Fixed: 2026-05-26
 Notes: `--max-time` in curl is per-attempt (not total — verified). 30s × 3 retries = 90s worst case for a token fetch. Bumped to 60s × 3 retries = 180s. Also documented the retry+timeout policy in a comment block and added a `User-Agent: ivuorinen/github-actions-runner-setup` header so GitHub-side rate-limit dashboards can identify our traffic.
 
-### Pass 11-20 — 2026-05-26 (adversarial hook bypass)
+### Pass 20 — 2026-05-26
+
+_Passes 11-20 — adversarial hook bypass._
 
 #### [N-28] HIGH — `block-cat-secrets` bypass via `bash -c "cat .env"`
 Fixed: 2026-05-26

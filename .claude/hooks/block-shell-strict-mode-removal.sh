@@ -4,7 +4,7 @@
 # first 30 lines. See .claude/rules/02-entrypoint-shell-strict-mode.md
 #
 # We only fire on Write of a complete file. Edit operations are not checked
-# here because TOOL_INPUT_new_string is a partial diff and we cannot tell
+# here because the new_string payload field is a partial diff and we cannot tell
 # whether the rest of the file still declares strict mode. The PostToolUse
 # companion hook `validate-shell-strict-mode.sh` reads the on-disk file and
 # warns when strict mode is missing after an Edit.
@@ -13,7 +13,14 @@
 
 set -Eeuo pipefail
 
-file_path="${TOOL_INPUT_FILE_PATH:-${TOOL_INPUT_file_path:-}}"
+# Claude Code delivers the tool payload as JSON on stdin (NOT environment
+# variables). See https://code.claude.com/docs/en/hooks.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "BLOCKED: jq not found; $(basename "$0") cannot enforce; failing closed. Install jq." >&2
+  exit 2
+fi
+hook_input="$(cat)"
+file_path="$(jq -r '.tool_input.file_path // empty' <<<"${hook_input}" 2>/dev/null || true)"
 [[ -z "${file_path}" ]] && exit 0
 
 case "${file_path}" in
@@ -21,7 +28,7 @@ case "${file_path}" in
 *) exit 0 ;;
 esac
 
-content="${TOOL_INPUT_content:-}"
+content="$(jq -r '.tool_input.content // empty' <<<"${hook_input}" 2>/dev/null || true)"
 [[ -z "${content}" ]] && exit 0
 
 head_text="$(printf '%s\n' "${content}" | head -30)"

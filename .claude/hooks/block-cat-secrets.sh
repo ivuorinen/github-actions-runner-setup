@@ -25,7 +25,16 @@
 
 set -Eeuo pipefail
 
-command="${TOOL_INPUT_command:-}"
+# Claude Code delivers the tool payload as JSON on stdin (NOT environment
+# variables). See https://code.claude.com/docs/en/hooks. Parse it with jq;
+# if jq is unavailable we cannot inspect the command, so this blocking hook
+# fails closed (exit 2) rather than silently allowing a secret-dumping command.
+if ! command -v jq >/dev/null 2>&1; then
+  echo "BLOCKED: jq not found; $(basename "$0") cannot enforce; failing closed. Install jq." >&2
+  exit 2
+fi
+hook_input="$(cat)"
+command="$(jq -r '.tool_input.command // empty' <<<"${hook_input}" 2>/dev/null || true)"
 [[ -z "${command}" ]] && exit 0
 
 # Tools that print / dump file contents. POSIX ERE (bash =~ does not

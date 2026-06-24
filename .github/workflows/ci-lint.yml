@@ -71,3 +71,16 @@ jobs:
             exit 1
           fi
           echo "PASS: all .claude/hooks/*.sh are executable"
+
+      - name: Verify hooks block and allow correctly
+        # Behavioral test: feeds canonical stdin-JSON payloads to each hook and
+        # asserts block (exit 2) / allow (exit 0). An executable-bit check is
+        # not enough — it cannot catch a hook that reads the wrong input source
+        # and silently allows everything (the N-61 regression class).
+        run: scripts/pre-commit-hooks/test-hooks.sh
+
+      - name: Verify security invariants (rules 06/11/12/13)
+        # Enforces digest-pinning, socket-proxy surface, runner caps, and
+        # no-broad-COPY on the committed files — independent of the client-side
+        # Claude hooks, so direct edits by any contributor are also caught.
+        run: scripts/pre-commit-hooks/check-security-invariants.sh Dockerfile docker-compose.yml
