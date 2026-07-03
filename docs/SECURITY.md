@@ -117,6 +117,21 @@ findings and remediations, see `docs/SECURITY-REVIEW-2026-04-20.md`.
 - **Supply-chain attacks against the base image.** Trivy in CI catches
   some of these; Renovate keeps the digest current. There is no
   reproducible-build guarantee.
+- **Vulnerabilities vendored into upstream base-image components.** The
+  Trivy image scan in `ci-docker.yml` skips two paths:
+  `/usr/local/lib/docker/cli-plugins/docker-buildx` (Go modules vendored
+  into the buildx binary) and the npm CLI's own `node_modules` trees under
+  `/home/runner/externals/node{20,24}` (npm's vendored dependencies).
+  For these, Trivy's "fixed version" refers to the vendored *module*, not
+  to any released buildx or actions/runner build that ships it, so
+  `ignore-unfixed` cannot suppress them and nothing in this repository can
+  remediate them — only an upstream release revendoring the fix can, which
+  arrives via the Renovate-managed base-image digest bump. Everything else
+  (OS packages, our own layers, the docker CLI) remains fully scanned.
+  Daemon-side binaries from the base image's static docker bundle
+  (`dockerd`, `containerd`, `runc`, `ctr`, shim) are deleted in the
+  `Dockerfile` rather than skipped: the daemon lives on the host behind
+  socket-proxy and those binaries are never executed in-container.
 - **Egress filtering.** The runners can reach any IP the host's default
   route reaches. If you need outbound restriction, run a host-level
   firewall.

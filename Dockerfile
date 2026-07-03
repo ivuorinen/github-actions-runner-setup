@@ -24,26 +24,37 @@ LABEL org.opencontainers.image.title="github-app-actions-runner" \
 USER root
 
 # Notes on package selection:
-#   - docker.io is Debian's combined docker daemon + CLI. We only need the CLI
-#     because runners talk to the host docker daemon via socket-proxy. Debian
-#     does not split docker into separate CLI/daemon packages, and the official
-#     `docker-ce-cli` repo adds external trust we don't need. The unused
-#     dockerd binary stays on disk but is never started inside the container.
+#   - No docker packages: the base image already ships the docker CLI and
+#     buildx plugin (static bundle installed to /usr/bin and
+#     /usr/local/lib/docker/cli-plugins). Runners talk to the host daemon
+#     via socket-proxy, so no daemon is needed in-container. The previously
+#     installed docker.io pulled in dockerd/containerd/runc and their CVE
+#     surface for a CLI we already had.
 #   - tini handles PID 1 signal forwarding and reaping zombies.
 #   - gosu drops privileges from root entrypoint to the runner user.
-# hadolint ignore=DL3008,DL3009
+# dist-upgrade applies Ubuntu security updates published after the base
+# image snapshot; Trivy flags every fixed-but-not-installed OS package.
+# DL3005 (no dist-upgrade) predates that tradeoff and is ignored.
+# hadolint ignore=DL3005,DL3008,DL3009
 RUN apt-get update \
+    && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         jq \
         openssl \
         git \
-        docker.io \
         tini \
         gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# The base image's static docker bundle includes daemon-side binaries that
+# are never executed here (the daemon lives on the host, behind socket-proxy)
+# but carry a large CVE surface. Remove them; keep the docker CLI and buildx
+# plugin, which workflows use for pull/build through socket-proxy.
+RUN rm -f /usr/bin/dockerd /usr/bin/docker-proxy /usr/bin/containerd \
+    /usr/bin/containerd-shim-runc-v2 /usr/bin/ctr /usr/bin/runc
 
 WORKDIR /home/runner
 
