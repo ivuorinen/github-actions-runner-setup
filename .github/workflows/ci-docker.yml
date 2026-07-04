@@ -60,6 +60,15 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
+          # Vendored dependencies inside base-image components are excluded:
+          # Trivy's "fixed version" for a Go/npm module vendored into an
+          # upstream binary refers to the module, not to any released binary,
+          # so ignore-unfixed cannot suppress them and no action in this repo
+          # can remediate them (only an actions/runner or docker/buildx
+          # release revendoring the fix can). OS packages and our own layers
+          # remain fully scanned. Rationale in docs/SECURITY.md.
+          skip-files: /usr/local/lib/docker/cli-plugins/docker-buildx
+          skip-dirs: /home/runner/externals/node20/lib/node_modules/npm/node_modules,/home/runner/externals/node24/lib/node_modules/npm/node_modules
 
       - name: Upload Trivy SARIF
         if: always()

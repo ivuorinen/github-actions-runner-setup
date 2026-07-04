@@ -17,7 +17,7 @@ For full architecture see `docs/ARCHITECTURE.md`. For operations see `docs/OPERA
 - `scripts/entrypoint.sh` — Orchestrates the entire lifecycle: JWT creation, token exchange, runner config, cleanup trap for deregistration
 - `scripts/healthcheck.sh` — Simple process check for Docker HEALTHCHECK
 - `scripts/pre-commit-hooks/` — Local pre-commit hook scripts (arithmetic-precedence check, no-docker-sock-in-runner check)
-- `Dockerfile` — Extends `ghcr.io/actions/actions-runner`, adds curl/jq/openssl/git/docker/tini
+- `Dockerfile` — Extends `ghcr.io/actions/actions-runner`, adds curl/jq/openssl/git/tini/gosu; docker CLI + buildx come from the base image, daemon-side binaries (dockerd/containerd/runc) are removed
 - `docker-compose.yml` — 3 runner services using YAML anchor (`&runner-common`); per-service `environment:` blocks (YAML merge doesn't deep-merge, so the anchor's environment is intentionally omitted)
 - `.env.example` — Full configuration reference with all supported variables (canonical reference in `docs/ENVIRONMENT-VARIABLES.md`)
 - `.claude/rules/` — Invariants that must hold; read before modifying entrypoint, Dockerfile, or compose
