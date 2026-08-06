@@ -8,7 +8,7 @@
 
 # Base image digest-pinned in addition to the semantic tag. Renovate manages
 # both the tag and the digest — see .github/renovate.json.
-FROM ghcr.io/actions/actions-runner:2.335.1@sha256:08c30b0a7105f64bddfc485d2487a22aa03932a791402393352fdf674bda2c29
+FROM ghcr.io/actions/actions-runner:2.336.0@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 
 # OCI image annotations. Renovate / GHCR / Trivy / Docker Hub all surface these.
 # `revision` and `created` are stamped by the CI build via --label flags.
